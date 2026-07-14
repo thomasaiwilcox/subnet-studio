@@ -8,7 +8,7 @@ Security and privacy fixes are applied to the latest released version. Historica
 
 Please do not open a public issue for a vulnerability that could execute code, expose user data, bypass import validation, create an unexpected network request, or corrupt a workspace.
 
-After the GitHub repository is created, use **Security → Report a vulnerability** to open a private security advisory. Include:
+Use **Security → Report a vulnerability** in the GitHub repository to open a private security advisory. Include:
 
 - the affected version or commit;
 - a minimal reproduction;

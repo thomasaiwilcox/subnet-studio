@@ -2,6 +2,8 @@
 
 **An explainable, offline-first visual studio for learning and planning IPv4 subnets.**
 
+[![CI](https://github.com/thomasaiwilcox/subnet-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/thomasaiwilcox/subnet-studio/actions/workflows/ci.yml)
+
 [Try the live application](https://thomaswilcox.com/subnetvisualiser/) · [Read the architecture](docs/ARCHITECTURE.md) · [Contribute](CONTRIBUTING.md)
 
 ![Subnet Studio visual IPv4 planning workspace](social-preview.png)
@@ -78,7 +80,7 @@ tests/                Unit, browser, mobile, security, and visual tests
 scripts/              Artifact verification and local publishing scripts
 assets/               Source material for publication assets
 downloaded-site/      Untouched historical implementation reference
-docs/                 Architecture, roadmap, release, and setup documentation
+docs/                 Architecture, roadmap, release, and repository documentation
 .github/               Issue forms, pull-request guidance, CI, and releases
 ```
 
