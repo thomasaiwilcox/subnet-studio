@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+playwright-report/
+test-results/
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# The root index.html and social-preview.png are intentionally tracked release artifacts.

@@ -1,0 +1,47 @@
+{
+  "name": "subnet-studio",
+  "version": "2.0.0",
+  "description": "An explainable, offline-first visual studio for learning and planning IPv4 subnets.",
+  "private": true,
+  "license": "MIT",
+  "author": "Thomas Wilcox",
+  "homepage": "https://thomaswilcox.com/subnetvisualiser/",
+  "keywords": [
+    "cidr",
+    "ipv4",
+    "networking",
+    "subnet",
+    "subnet-calculator",
+    "vlsm",
+    "visualisation"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build && node scripts/verify-build.mjs && node scripts/publish-root.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ci": "playwright test tests/e2e/publication.spec.ts tests/e2e/mobile.spec.ts tests/e2e/workspace.spec.ts tests/e2e/learning.spec.ts",
+    "test:visual": "playwright test tests/e2e/visual.spec.ts",
+    "verify:dist": "node scripts/verify-build.mjs",
+    "check": "npm run typecheck && npm run test && npm run build"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.61.1",
+    "@types/node": "^26.1.1",
+    "typescript": "^7.0.2",
+    "vite": "^8.1.4",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Learn, visualise and plan IPv4 subnetting with an offline-first interactive CIDR workspace." />
+    <link rel="canonical" href="https://thomaswilcox.com/subnetvisualiser/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Subnet Studio — visual IPv4 planning" />
+    <meta property="og:description" content="Learn subnetting spatially, build VLSM plans, and understand every CIDR decision." />
+    <meta property="og:url" content="https://thomaswilcox.com/subnetvisualiser/" />
+    <meta property="og:image" content="https://thomaswilcox.com/subnetvisualiser/social-preview.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <title>Subnet Studio — Visual IPv4 Planner</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="studio-shell">
+      <header class="page-header">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+          <div>
+            <p class="eyebrow">IPv4 design environment</p>
+            <h1>Subnet Studio</h1>
+          </div>
+        </div>
+
+        <nav id="command-bar" class="command-bar" aria-label="Workspace controls">
+          <div class="control-group history-controls" aria-label="History">
+            <button id="undo-button" class="icon-action secondary" disabled aria-label="Undo">↶</button>
+            <button id="redo-button" class="icon-action secondary" disabled aria-label="Redo">↷</button>
+            <button id="reset-button" class="secondary">Reset</button>
+            <button id="start-over-button" class="secondary">Start over</button>
+          </div>
+          <div class="control-group view-controls" aria-label="View">
+            <button id="fit-button" class="secondary">Fit</button>
+            <button id="pan-button" class="secondary" aria-pressed="false" title="Toggle dedicated pan mode; desktop mouse drag always pans">Pan</button>
+            <button id="reset-view-button" class="secondary" aria-label="Reset view">1:1</button>
+          </div>
+          <div class="menu-row">
+            <div class="menu">
+              <button class="menu-trigger secondary" aria-label="Share ▾" aria-expanded="false" aria-controls="share-menu">Share <span>⌄</span></button>
+              <div id="share-menu" class="menu-content" hidden>
+                <button id="copy-link-button">Copy share link</button><button id="export-json-button">Export JSON</button><button id="import-json-button">Import JSON</button>
+              </div>
+            </div>
+            <div class="menu">
+              <button class="menu-trigger secondary" aria-label="Export ▾" aria-expanded="false" aria-controls="export-menu">Export <span>⌄</span></button>
+              <div id="export-menu" class="menu-content" hidden>
+                <button id="export-svg-button">Export SVG</button><button id="export-png-button">Export PNG</button><button id="export-csv-button">Export CSV</button><button id="report-html-button">Offline HTML report</button><button id="report-markdown-button">Markdown report</button><button id="report-print-button">Print report / PDF</button>
+              </div>
+            </div>
+            <div class="menu">
+              <button class="menu-trigger secondary" aria-expanded="false" aria-controls="display-menu">Display <span>⌄</span></button>
+              <div id="display-menu" class="menu-content" hidden>
+                <label for="label-density">Labels</label>
+                <select id="label-density"><option value="minimal">Minimal</option><option value="normal" selected>Normal</option><option value="verbose">Verbose</option></select>
+                <label for="animation-select">Motion</label>
+                <select id="animation-select"><option value="normal">Normal</option><option value="reduced">Reduced</option><option value="off">Off</option></select>
+                <button id="compact-button" class="secondary" aria-pressed="false">Compact mode</button>
+              </div>
+            </div>
+            <div class="menu">
+              <button class="menu-trigger secondary" aria-expanded="false" aria-controls="help-menu">Help <span>⌄</span></button>
+              <div id="help-menu" class="menu-content" hidden><button id="help-button">Help & privacy</button><button id="shortcuts-button">Keyboard shortcuts</button><button id="replay-walkthrough-button">Replay walkthrough</button></div>
+            </div>
+          </div>
+          <button id="theme-button" class="icon-action secondary" aria-label="Use light theme" title="Toggle theme">☀</button>
+        </nav>
+      </header>
+
+      <aside class="tool-sidebar" aria-label="Subnet tools">
+        <section class="workspace-heading" aria-labelledby="envelope-label">
+          <p class="eyebrow">Current address space</p>
+          <h2 id="envelope-label"></h2>
+          <p id="workspace-profile-label" class="workspace-profile-copy"></p>
+          <button id="address-button" class="address-edit" aria-label="Address">Change address space <span aria-hidden="true">↗</span></button>
+        </section>
+
+        <section class="profile-card">
+          <label for="profile-select">Planning profile</label>
+          <select id="profile-select" aria-label="Reserved address profile">
+            <option value="none">No cloud reservations</option><option value="azure">Azure (4 + 1)</option><option value="aws">AWS (4 + 1)</option><option value="gcp">GCP (2 + 2)</option><option value="custom">Custom…</option>
+          </select>
+          <button id="custom-profile-button" class="secondary" hidden>Configure reservations</button>
+        </section>
+
+        <section class="workspace-metrics" aria-label="Workspace summary">
+          <div><strong id="metric-leaves">1</strong><span>Subnets</span></div>
+          <div><strong id="metric-allocated">0%</strong><span>Allocated</span></div>
+          <div><strong id="metric-free">256</strong><span>Free IPs</span></div>
+        </section>
+
+        <section class="primary-ribbon" aria-label="Primary actions">
+          <button id="plan-button" class="hero-action" aria-label="Plan"><span class="action-icon" aria-hidden="true">＋</span><span><strong>Plan allocation</strong><small>Preview with Subnet Coach</small></span></button>
+          <button id="scenarios-button" class="secondary full-button">Try an example</button>
+          <div class="action-pair"><button id="select-button" class="secondary" aria-label="Select" aria-pressed="false">Join mode</button><button id="join-button" aria-label="Join" disabled>Join selected</button></div>
+          <div class="find-fit">
+            <label for="find-fit-prefix">Find available block</label>
+            <div><select id="find-fit-prefix" aria-label="Find fit"></select><button id="find-fit-button">Find fit</button></div>
+            <button id="clear-highlight-button" class="text-button">Clear highlights</button>
+          </div>
+        </section>
+
+        <section class="activity-panel">
+          <header><div><p class="eyebrow">Timeline</p><h2>Workspace history</h2></div><span class="timeline-hint">Hover to preview</span></header>
+          <ol id="activity-log" class="activity-log" aria-label="Workspace history"></ol>
+        </section>
+      </aside>
+
+      <main class="studio-main">
+        <section class="stage-heading">
+          <div><p class="eyebrow">Spatial workspace</p><h2>Address map</h2></div>
+          <div class="stage-tip"><span aria-hidden="true">↔</span> Drag empty space to pan · wheel or pinch to zoom</div>
+        </section>
+
+        <section id="viewport" class="viewport" aria-label="Subnet map">
+          <div class="canvas-grid" aria-hidden="true"></div>
+          <div id="world" class="world"></div>
+          <div id="history-preview-banner" class="preview-banner" hidden><strong>Previewing history</strong><span id="history-preview-label"></span><button id="history-restore-button">Restore this point</button><button id="history-preview-close" class="secondary">Close</button></div>
+          <div id="map-actions" class="map-actions" hidden aria-label="Selected subnet actions">
+            <span id="map-actions-cidr"></span>
+            <button id="map-split-button" aria-label="Split selected subnet">Split</button><button id="map-allocate-button">Allocate</button><button id="map-sibling-button" class="secondary">Select sibling</button><button id="map-join-sibling-button" class="secondary">Join sibling</button><button id="map-deallocate-button" class="danger">Deallocate</button><button id="map-copy-button" class="secondary">Copy CIDR</button>
+            <p id="map-action-reason" class="action-reason"></p>
+          </div>
+          <div id="join-candidates" class="join-candidates" hidden aria-live="polite"></div>
+          <div id="minimap" class="minimap" aria-hidden="true"><div id="minimap-view"></div></div>
+          <div class="canvas-key"><span><i class="key-dot available"></i>Available</span><span><i class="key-dot allocated"></i>Allocated</span><span><i class="key-dot candidate"></i>Fit</span></div>
+          <div class="canvas-hud" aria-live="polite"><strong id="zoom-readout">100%</strong><span>zoom</span></div>
+        </section>
+
+        <section class="cidr-lens" aria-labelledby="lens-title">
+          <div class="lens-copy"><p class="eyebrow">Live CIDR lens</p><h2 id="lens-title">192.168.1.0/24</h2><p id="lens-description">24 network bits identify the subnet. 8 host bits identify addresses inside it.</p></div>
+          <div class="lens-visual">
+            <div class="bit-ruler-labels"><span>Network</span><span>Host</span></div>
+            <div id="prefix-ruler" class="prefix-ruler" role="img" aria-label="CIDR prefix bit boundary"></div>
+          </div>
+          <div class="lens-values"><span><small>Mask</small><strong id="lens-mask">255.255.255.0</strong></span><span><small>Addresses</small><strong id="lens-addresses">256</strong></span><span><small>Usable</small><strong id="lens-usable">254</strong></span></div>
+        </section>
+      </main>
+
+      <aside class="context-dock" aria-label="Workspace information">
+        <nav class="dock-tabs" role="tablist" aria-label="Context panels">
+          <button id="dock-inspector-tab" role="tab" aria-selected="true" aria-controls="dock-inspector-panel">Inspect</button>
+          <button id="dock-inventory-tab" role="tab" aria-selected="false" aria-controls="dock-inventory-panel">Subnets</button>
+          <button id="dock-learn-tab" role="tab" aria-selected="false" aria-controls="dock-learn-panel">Learn</button>
+          <button id="dock-prefix-tab" role="tab" aria-selected="false" aria-controls="dock-prefix-panel">Prefix</button>
+          <button id="dock-analyse-tab" role="tab" aria-selected="false" aria-controls="dock-analyse-panel">Analyse</button>
+          <button id="dock-plan-tab" role="tab" aria-selected="false" aria-controls="dock-plan-panel" hidden>Plan</button>
+        </nav>
+
+        <section id="dock-inspector-panel" class="dock-panel" role="tabpanel" aria-labelledby="dock-inspector-tab">
+          <div id="inspector-empty" class="inspector-empty">
+            <div class="empty-orbit" aria-hidden="true"><span></span><span></span></div>
+            <p class="eyebrow">Nothing selected</p><h2>Choose a subnet</h2>
+            <p>Click any block in the map to inspect its mask, usable range, reservations and binary boundary.</p>
+          </div>
+          <aside id="details-panel" class="details-panel" aria-labelledby="details-title" hidden>
+            <header id="details-header"><div><p class="eyebrow">Subnet inspector</p><h2 id="details-title">Subnet details</h2></div><button id="details-close" class="icon-action secondary" aria-label="Close subnet details">×</button></header>
+            <dl class="details-grid">
+              <div class="wide featured"><dt>CIDR</dt><dd id="details-cidr"></dd></div><div><dt>Network</dt><dd id="details-network"></dd></div><div><dt>Mask</dt><dd id="details-mask"></dd></div><div><dt>Broadcast</dt><dd id="details-broadcast"></dd></div><div class="wide"><dt>Usable range</dt><dd id="details-usable"></dd></div><div><dt>Addresses</dt><dd id="details-total"></dd></div><div><dt>Usable</dt><dd id="details-usable-count"></dd></div><div class="wide"><dt>Allocation</dt><dd id="details-allocation"></dd></div>
+            </dl>
+            <div id="reservation-bar" class="reservation-bar" aria-label="Address usage"></div>
+            <div class="details-actions"><button id="details-split">Split subnet</button><button id="details-deallocate" class="danger" hidden>Deallocate subnet</button><button id="binary-toggle" class="secondary" aria-expanded="false" aria-controls="binary-panel">Explain in binary</button></div>
+            <div id="binary-panel" class="binary-panel" hidden><p id="binary-address"></p><div id="binary-bits" class="binary-bits" aria-label="Binary address"></div><p id="binary-explanation" class="muted"></p></div>
+          </aside>
+        </section>
+
+        <section id="dock-inventory-panel" class="dock-panel" role="tabpanel" aria-labelledby="dock-inventory-tab" hidden>
+          <article class="table-panel">
+            <header><div><p class="eyebrow">Address inventory</p><h2>All subnets</h2></div></header>
+            <div class="table-controls"><label for="table-filter">Show</label><select id="table-filter"><option value="all">All</option><option value="allocated">Allocated</option><option value="unallocated">Unallocated</option></select><label for="table-sort">Sort</label><select id="table-sort"><option value="network">Network</option><option value="prefix">Prefix</option><option value="size">Size</option></select></div>
+            <div class="table-scroll"><table><thead><tr><th>CIDR</th><th>Usable</th><th>Status</th><th>Group</th></tr></thead><tbody id="subnet-table-body"></tbody></table></div>
+          </article>
+        </section>
+
+        <section id="dock-learn-panel" class="dock-panel" role="tabpanel" aria-labelledby="dock-learn-tab" hidden>
+          <aside id="learn-panel" class="learn-panel" aria-labelledby="learn-title">
+            <header><div><p class="eyebrow">Guided practice</p><h2 id="learn-title">Subnetting academy</h2></div><button id="learn-close" class="icon-action secondary" aria-label="Close learning panel">×</button></header>
+            <p class="learn-intro">Short challenges open a safe practice workspace. Exit at any time to restore your original design exactly.</p>
+            <div id="lesson-list" class="lesson-list"></div>
+            <section id="lesson-active" class="lesson-active" hidden aria-live="polite"><div class="lesson-heading"><span id="lesson-kicker" class="lesson-kicker"></span><h3 id="lesson-title"></h3><p id="lesson-objective"></p></div><div class="lesson-progress-track" aria-hidden="true"><span id="lesson-progress-bar"></span></div><ol id="lesson-steps" class="lesson-steps"></ol><div id="lesson-hint" class="lesson-hint" hidden></div><div class="lesson-actions"><button id="lesson-hint-button" class="secondary">Show hint</button><button id="lesson-restart-button" class="secondary">Restart</button><button id="lesson-exit-button">Exit & restore workspace</button></div></section>
+          </aside>
+        </section>
+
+        <section id="dock-prefix-panel" class="dock-panel" role="tabpanel" aria-labelledby="dock-prefix-tab" hidden>
+          <section class="prefix-lab" aria-labelledby="prefix-lab-title">
+            <div class="prefix-lab-copy"><p class="eyebrow">Prefix playground</p><h2 id="prefix-lab-title">Move the slash</h2><p>Explore any prefix without changing your workspace.</p></div>
+            <div class="prefix-hero"><strong id="prefix-slider-value">/24</strong></div>
+            <div class="prefix-lab-control"><label for="prefix-slider">CIDR prefix</label><input id="prefix-slider" type="range" min="0" max="32" value="24" /><div id="prefix-slider-bits" class="mini-bit-ruler" aria-hidden="true"></div></div>
+            <dl class="prefix-lab-values"><div><dt>Mask</dt><dd id="prefix-lab-mask">255.255.255.0</dd></div><div><dt>Addresses</dt><dd id="prefix-lab-addresses">256</dd></div><div><dt>Classic usable</dt><dd id="prefix-lab-usable">254</dd></div><div><dt>Host bits</dt><dd id="prefix-lab-host-bits">8</dd></div></dl>
+          </section>
+        </section>
+
+        <section id="dock-analyse-panel" class="dock-panel" role="tabpanel" aria-labelledby="dock-analyse-tab" hidden>
+          <section class="analysis-panel"><header><div><p class="eyebrow">Capacity intelligence</p><h2>Workspace analysis</h2></div></header><div id="analysis-summary" class="analysis-summary"></div><h3>Allocation groups</h3><div id="analysis-groups" class="analysis-groups"></div><div class="analysis-actions"><button id="analysis-report-button">Open report preview</button></div></section>
+        </section>
+
+        <section id="dock-plan-panel" class="dock-panel plan-workspace" role="tabpanel" aria-labelledby="dock-plan-tab" hidden>
+          <form id="plan-form">
+            <header><div><p class="eyebrow">Transient workspace</p><h2>Live allocation plan</h2></div><button id="plan-close-button" type="button" class="icon-action secondary" aria-label="Cancel">×</button></header>
+            <p class="muted">One request per line. Try <code>Web: /26 x2</code> or <code>Database: hosts=50</code>.</p>
+            <label for="plan-text">Requirements</label><textarea id="plan-text" aria-label="Requests" rows="7" placeholder="Web: /26 x2&#10;Database: hosts=50"></textarea>
+            <label for="plan-heuristic">Placement</label><select id="plan-heuristic"><option value="closest">Closest fit</option><option value="left">Lowest address first</option><option value="largest">Largest space first</option></select>
+            <div class="plan-examples"><button type="button" aria-label="Example: web + database" class="plan-example secondary" data-plan-example="Web: hosts=50&#10;Database: hosts=20">Web + database</button><button type="button" aria-label="Example: four tiers" class="plan-example secondary" data-plan-example="Frontend: hosts=100&#10;API: hosts=50&#10;Data: hosts=25&#10;Management: /28">Four tiers</button></div>
+            <div id="plan-preview" class="plan-preview" aria-live="polite"></div><p id="plan-error" class="form-error" role="alert"></p>
+            <div id="coach-panel" class="coach-panel" hidden><div class="coach-progress"><span id="coach-step-label"></span><progress id="coach-progress" max="6" value="1"></progress></div><h3 id="coach-title"></h3><p id="coach-explanation"></p><div class="coach-actions"><button id="coach-previous" type="button" class="secondary">Previous</button><button id="coach-next" type="button" class="secondary">Next</button></div></div>
+            <footer class="plan-actions"><button id="coach-open-button" type="button" class="secondary" disabled>Explain this plan</button><button id="plan-apply-button" type="submit" aria-label="Allocate atomically" disabled>Apply exact preview</button></footer>
+          </form>
+        </section>
+      </aside>
+
+      <footer class="studio-statusbar"><span class="status-ready"><i></i>Workspace valid</span><button id="learn-button" class="learn-launch" aria-expanded="false" aria-controls="learn-panel">Open guided learning <span aria-hidden="true">→</span></button><span id="version-label">IPv4 · Offline · 2,048 leaf limit</span></footer>
+    </div>
+
+    <dialog id="address-dialog" aria-labelledby="address-dialog-title">
+      <form id="address-form" method="dialog">
+        <header><div><p class="eyebrow">Workspace</p><h2 id="address-dialog-title">Set address space</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header>
+        <p class="muted">Enter a canonical IPv4 network such as 10.0.0.0/16.</p>
+        <label for="address-input">Address space (CIDR)</label>
+        <input id="address-input" autocomplete="off" required />
+        <p id="address-error" class="form-error" role="alert"></p>
+        <footer><button type="button" class="dialog-cancel secondary">Cancel</button><button type="submit">Set address space</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="split-dialog" aria-labelledby="split-dialog-title">
+      <form id="split-form" method="dialog">
+        <header><div><p class="eyebrow">Subnet action</p><h2 id="split-dialog-title">Split subnet</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header>
+        <p id="split-source" class="muted"></p>
+        <label for="split-prefix">New prefix</label>
+        <select id="split-prefix"></select>
+        <p id="split-preview" class="muted"></p>
+        <p id="split-error" class="form-error" role="alert"></p>
+        <footer><button type="button" class="dialog-cancel secondary">Cancel</button><button type="submit">Split</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="allocation-dialog" aria-labelledby="allocation-title"><form id="allocation-form" method="dialog"><header><div><p class="eyebrow">Direct allocation</p><h2 id="allocation-title">Allocate subnet</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header><p id="allocation-cidr" class="muted"></p><label for="allocation-label">Label</label><input id="allocation-label" maxlength="120" required /><label for="allocation-hosts">Requested hosts <span class="muted">(optional)</span></label><input id="allocation-hosts" type="number" min="1" /><label for="allocation-group">Or reuse a group</label><select id="allocation-group"><option value="">Create a new group</option></select><p id="allocation-error" class="form-error"></p><footer><button type="button" class="dialog-cancel secondary">Cancel</button><button type="submit">Allocate</button></footer></form></dialog>
+
+    <dialog id="scenarios-dialog" class="wide-dialog" aria-labelledby="scenarios-title"><div class="dialog-content"><header><div><p class="eyebrow">Ready-made workspaces</p><h2 id="scenarios-title">Scenario gallery</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header><div id="scenario-grid" class="scenario-grid"></div><footer><button type="button" class="dialog-close secondary">Close</button></footer></div></dialog>
+
+    <dialog id="report-dialog" class="report-dialog" aria-labelledby="report-preview-title"><div class="dialog-content"><header><div><p class="eyebrow">Publication-ready output</p><h2 id="report-preview-title">Report preview</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header><iframe id="report-frame" title="Subnet report preview"></iframe><footer><button id="report-download-html" type="button" class="secondary">Download HTML</button><button id="report-print-preview" type="button">Print / Save as PDF</button></footer></div></dialog>
+
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title"><div class="dialog-content"><header><div><p class="eyebrow">Confirm change</p><h2 id="confirm-title">Replace this workspace?</h2></div></header><p id="confirm-message"></p><footer><button id="confirm-cancel" type="button" class="secondary">Keep working</button><button id="confirm-accept" type="button">Continue</button></footer></div></dialog>
+
+    <dialog id="walkthrough-dialog" class="walkthrough-dialog" aria-labelledby="walkthrough-title"><div class="dialog-content"><div class="walkthrough-visual" id="walkthrough-visual" aria-hidden="true"></div><div class="walkthrough-copy"><p id="walkthrough-step" class="eyebrow"></p><h2 id="walkthrough-title"></h2><p id="walkthrough-text"></p><div class="walkthrough-dots" id="walkthrough-dots"></div><footer><button id="walkthrough-skip" type="button" class="text-button">Skip</button><button id="walkthrough-back" type="button" class="secondary">Back</button><button id="walkthrough-next" type="button">Next</button></footer></div></div></dialog>
+
+    <dialog id="custom-profile-dialog" aria-labelledby="custom-profile-dialog-title">
+      <form id="custom-profile-form" method="dialog">
+        <header><div><p class="eyebrow">Reservations</p><h2 id="custom-profile-dialog-title">Custom profile</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header>
+        <div class="field-row"><div><label for="custom-head">Reserved at start</label><input id="custom-head" type="number" min="0" max="65536" value="0" /></div><div><label for="custom-tail">Reserved at end</label><input id="custom-tail" type="number" min="0" max="65536" value="0" /></div></div>
+        <p id="custom-profile-error" class="form-error" role="alert"></p>
+        <footer><button type="button" class="dialog-cancel secondary">Cancel</button><button type="submit">Apply profile</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="import-dialog" class="wide-dialog" aria-labelledby="import-dialog-title">
+      <form id="import-form" method="dialog">
+        <header><div><p class="eyebrow">Versioned state</p><h2 id="import-dialog-title">Import workspace JSON</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header>
+        <label for="import-text">Workspace JSON</label>
+        <textarea id="import-text" rows="12"></textarea>
+        <p id="import-error" class="form-error" role="alert"></p>
+        <footer><button type="button" class="dialog-cancel secondary">Cancel</button><button type="submit">Validate and import</button></footer>
+      </form>
+    </dialog>
+
+    <dialog id="help-dialog" class="wide-dialog" aria-labelledby="help-title">
+      <div class="dialog-content">
+        <header><div><p class="eyebrow">Guide</p><h2 id="help-title">How to use the visualiser</h2></div><button type="button" class="dialog-close icon-button secondary" aria-label="Close">×</button></header>
+        <label for="help-search">Search help and shortcuts</label><input id="help-search" type="search" placeholder="Try “join”, “touch”, “privacy”…" />
+        <div id="help-content"></div>
+        <footer><button type="button" class="dialog-close">Done</button></footer>
+      </div>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="live-region" class="visually-hidden" aria-live="polite"></div>
+    <script type="module" src="/app.ts"></script>
+  </body>
+</html>

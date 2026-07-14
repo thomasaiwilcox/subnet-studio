@@ -1,0 +1,49 @@
+name: Feature request
+description: Suggest a focused improvement for subnet learners or practitioners.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Who encounters this problem, and what are they trying to understand or accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed experience
+      description: Describe the user interaction and expected explanation, not only an implementation.
+    validations:
+      required: true
+  - type: dropdown
+    id: audience
+    attributes:
+      label: Primary audience
+      options:
+        - Learners and certification candidates
+        - Teachers and trainers
+        - Network and infrastructure practitioners
+        - All audiences
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Could existing planning, scenario, report, or learning features solve this already?
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Offline, accessibility, and compatibility considerations
+      description: Note implications for mobile, keyboard use, schema-v1 data, provider rules, or the standalone build.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues and reviewed the roadmap.
+          required: true
+        - label: This request does not require telemetry or a background service to provide its core value.
+          required: true

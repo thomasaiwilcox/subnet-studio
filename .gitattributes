@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.png binary
+*.html diff=html
+package-lock.json linguist-generated=false
+index.html linguist-generated=true
+index.html whitespace=-blank-at-eol,-blank-at-eof
+downloaded-site/** whitespace=-blank-at-eol,-blank-at-eof

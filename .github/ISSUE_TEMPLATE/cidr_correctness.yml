@@ -1,0 +1,68 @@
+name: CIDR correctness report
+description: Report suspected IPv4 arithmetic, alignment, split, join, reservation, planning, or capacity errors.
+title: "[CIDR correctness]: "
+labels: [bug, cidr-correctness]
+body:
+  - type: markdown
+    attributes:
+      value: Calculation reports receive priority. The smallest reproducible example helps us protect the domain invariants with a regression test.
+  - type: input
+    id: version
+    attributes:
+      label: Subnet Studio version
+      placeholder: 2.0.0
+    validations:
+      required: true
+  - type: input
+    id: envelope
+    attributes:
+      label: Address-space envelope
+      placeholder: 10.0.0.0/16
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Provider profile
+      options:
+        - No cloud reservations
+        - Azure
+        - AWS
+        - GCP
+        - Custom
+    validations:
+      required: true
+  - type: textarea
+    id: operation
+    attributes:
+      label: Operation and inputs
+      description: Describe the split, join, allocation, plan, import, analysis, or export that produced the result.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected calculation
+      description: Include your expected CIDRs, masks, ranges, reservations, or capacity and how you derived them.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Subnet Studio result
+    validations:
+      required: true
+  - type: textarea
+    id: workspace
+    attributes:
+      label: Minimal workspace or share data
+      description: Attach schema-v1 JSON after removing sensitive labels. Do not include credentials or confidential production details.
+  - type: checkboxes
+    id: verification
+    attributes:
+      label: Independent verification
+      options:
+        - label: I checked the expected result independently and searched for an existing issue.
+          required: true
+        - label: I understand Subnet Studio plans should be verified before production network changes.
+          required: true

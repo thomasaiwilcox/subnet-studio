@@ -1,0 +1,2398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CIDR Visualizer - Step 3c Rebuild (Grid Debugging)</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+          --primary-color: #007bff;
+          --primary-hover: #0056b3;
+          --active-color: #004a9a;
+          --background: #f2f2f2;
+          --card-bg: #ffffff;
+          --text-color: #333;
+          --border-color: #ddd;
+          --border-color-blocks: rgba(0,0,0,0.1);
+          --gradient-start: rgba(255,255,255,0.8);
+          --gradient-end: rgba(0,0,0,0.05);
+          --unusable-color: #A52A2A;
+          --transition-speed: 0.3s;
+          --disabled-bg: #aaa;
+          --disabled-text: #eee;
+        }
+        body.dark-mode {
+          /* Premium dark palette */
+          --primary-color: #8ab4ff;
+          --primary-hover: #74a0f0;
+          --active-color: #628fe0;
+          --background: radial-gradient(1200px 800px at 10% 0%, #0f172a 0%, #0b1327 40%, #0a1224 100%);
+          --card-bg: rgba(22, 27, 38, 0.55);
+          --text-color: #e5e7eb;
+          --muted-text: #9ca3af;
+          --border-color: rgba(255,255,255,0.12);
+          --border-color-blocks: rgba(255,255,255,0.08);
+          --gradient-start: rgba(255,255,255,0.05);
+          --gradient-end: rgba(255,255,255,0.02);
+          --unusable-color: #ef4444;
+          --disabled-bg: #4b5563;
+          --disabled-text: #9ca3af;
+        }
+        * { box-sizing: border-box; }
+        body { font-family: 'Roboto', sans-serif; margin: 0; padding: 20px; background-color: var(--background); color: var(--text-color); display: flex; flex-direction: column; align-items: center; transition: background-color var(--transition-speed), color var(--transition-speed); min-height: 100vh; }
+        h1 { margin-bottom: 15px; font-weight: 700; text-align: center; }
+        p { max-width: 600px; text-align: center; margin-bottom: 20px; line-height: 1.5; font-size: 16px; }
+        #envelope-label { font-size: 20px; margin-bottom: 15px; font-weight: 500; min-height: 1.2em; }
+        #controls { margin-bottom: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; }
+        button { padding: 10px 18px; border: none; background-color: var(--primary-color); color: #fff; border-radius: 5px; font-size: 16px; font-family: inherit; cursor: pointer; transition: background-color var(--transition-speed), transform var(--transition-speed), box-shadow var(--transition-speed); user-select: none; }
+        button:hover { background-color: var(--primary-hover); transform: translateY(-2px); }
+        button:disabled { background-color: var(--disabled-bg); color: var(--disabled-text); cursor: not-allowed; transform: none; box-shadow: none; }
+        button:disabled:hover { background-color: var(--disabled-bg); }
+        button.active-button { background-color: var(--active-color); box-shadow: inset 0 2px 4px rgba(0,0,0,0.2); transform: translateY(1px); }
+        button.active-button:hover { background-color: var(--primary-hover); }
+        #container { width: clamp(300px, 85vw, 1200px); height: 75vh; background-color: var(--card-bg); border-radius: 10px; border: 2px solid var(--border-color); position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: background-color var(--transition-speed), border-color var(--transition-speed); margin-bottom: 20px; }
+        #tooltip { position: absolute; background: var(--card-bg); border: 1px solid var(--border-color); color: var(--text-color); padding: 8px 12px; border-radius: 5px; pointer-events: none; font-size: 13px; box-shadow: 0 2px 6px rgba(0,0,0,0.15); opacity: 0; transition: opacity var(--transition-speed); z-index: 1000; max-width: 300px; white-space: normal; }
+        #tooltip.show { opacity: 1; }
+        #tooltip strong { font-weight: 500; }
+        .block { display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color-blocks); font-size: 12px; cursor: pointer; overflow: hidden; aspect-ratio: 2 / 1; padding: 8px; transition: transform var(--transition-speed), box-shadow var(--transition-speed), background-color 0.5s, outline var(--transition-speed); position: relative; user-select: none; z-index: 0; }
+        .block::before { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); pointer-events: none; z-index: -1; transition: opacity 0.3s; }
+        .block > * { position: relative; z-index: 1; }
+        .block:hover { transform: scale(1.02); box-shadow: 0 3px 8px rgba(0,0,0,0.15); z-index: 10; }
+        .block.is-selected { outline: 3px solid var(--primary-color); outline-offset: -2px; box-shadow: 0 0 10px var(--primary-color); z-index: 20 !important; }
+        .block.is-selected::before { opacity: 0.5; }
+        .block.is-split { display: grid; padding: 0; border: none; background-color: transparent !important; aspect-ratio: unset; cursor: default; box-shadow: none; transform: none; outline: none; }
+        .block.is-split::before { opacity: 0; display: none; }
+        .block.is-split > .block { display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-color-blocks); font-size: 12px; cursor: pointer; overflow: hidden; aspect-ratio: unset; padding: 8px; position: relative; user-select: none; z-index: 0; width: 100%; height: 100%; transform: none; box-shadow: none; }
+         .block.is-split > .block::before { content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end)); pointer-events: none; z-index: -1; transition: opacity 0.3s; opacity: 1; }
+         .block.is-split > .block:hover { transform: scale(1.02); box-shadow: 0 3px 8px rgba(0,0,0,0.15); z-index: 10; }
+         .block.is-unusable { background-color: var(--unusable-color) !important; color: #fff !important; }
+         .block.is-unusable::before { display: none; }
+        #details-panel {
+            position: fixed;
+            right: 20px;
+            top: calc(var(--toolbar-offset, 120px) + 16px);
+            width: 560px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            transition: opacity 0.3s, transform 0.3s;
+            z-index: 500;
+            opacity: 1;
+            transform: translateX(0);
+        }
+
+        #details-panel.details-panel-hidden {
+            opacity: 0;
+            transform: translateX(20px);
+            pointer-events: none;
+        }
+
+        #details-panel h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            cursor: grab;
+            user-select: none;
+        }
+        #details-panel.dragging h2 { cursor: grabbing; }
+
+        /* Docking behavior */
+        #details-panel.docked-left { left: 0 !important; right: auto !important; transform: translateX(calc(-100% + 40px)); }
+        #details-panel.docked-right { right: 0 !important; left: auto !important; transform: translateX(calc(100% - 40px)); }
+        #details-panel .details-tab { position: absolute; top: 40%; width: 40px; height: 140px; display: none; align-items: center; justify-content: center; writing-mode: vertical-rl; text-orientation: mixed; background: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 6px 18px rgba(24,33,77,.08); cursor: pointer; font-size: 12px; }
+        #details-panel.docked-left .details-tab { display: flex; right: 2px; }
+        #details-panel.docked-right .details-tab { display: flex; left: 2px; }
+        /* Fade body when docked */
+        #details-panel .details-body { opacity: 1; transition: opacity 0.2s ease; }
+        #details-panel.docked-left .details-body,
+        #details-panel.docked-right .details-body { opacity: 0; pointer-events: none; }
+        /* Gentle 2s pulse on the tab when a leaf is clicked */
+        #details-panel .details-tab.tab-pulse { animation: pulseCoach 2s ease-out 1; }
+
+        #details-panel p {
+            margin: 0 0 10px;
+            font-size: 14px;
+            text-align: left;
+        }
+
+        #details-panel p strong {
+            font-weight: 500;
+            color: var(--primary-color);
+        }
+
+        #details-split-button {
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        .ip-viz {
+            display: flex;
+            height: 20px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+
+        .ip-viz-segment {
+            height: 100%;
+            position: relative;
+        }
+
+        .ip-viz-segment:hover .ip-viz-tooltip {
+            display: block;
+        }
+
+        .ip-viz-tooltip {
+            display: none;
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--card-bg);
+            color: var(--text-color);
+            padding: 5px;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            white-space: nowrap;
+            z-index: 10;
+        }
+
+        #log-panel {
+            width: clamp(300px, 85vw, 1200px);
+            margin-top: 20px;
+            background-color: var(--card-bg);
+            border-radius: 10px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #log-header {
+            font-weight: 500;
+            padding: 10px 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        #log-content {
+            padding: 15px;
+            height: 150px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .log-entry {
+            margin-bottom: 8px;
+        }
+
+        dialog { border: none; border-radius: 12px; padding: 22px; box-shadow: 0 10px 26px rgba(24,33,77,.15); max-width: 90vw; width: 520px; background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); color: var(--text-color); border: 1px solid var(--border-color); }
+        dialog h2 { margin-top: 0; font-weight: 600; font-size: 18px; }
+        dialog p#envelope-disclaimer { font-size: 0.8em; opacity: 0.8; }
+        dialog::backdrop { background: radial-gradient(600px 400px at 50% 30%, rgba(91,140,255,.25), rgba(17,24,39,.6)); }
+        dialog form { display: flex; flex-direction: column; gap: 15px; }
+        dialog label { font-weight: 500; }
+        dialog input[type="text"] { padding: 12px; font-size: 15px; border: 1px solid var(--border-color); border-radius: 10px; background: rgba(255,255,255,.65); color: var(--text-color); font-family: inherit; }
+        /* Micro-interactions */
+        @keyframes rise { from { transform: translateY(6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+        .fade-in { animation: rise var(--transition-speed) cubic-bezier(.2,.7,.3,1); }
+        dialog form div.dialog-buttons { display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px; }
+        dialog button[value="cancel"] { background-color: #6c757d; }
+        dialog button[value="cancel"]:hover { background-color: #5a6268; }
+        .visually-hidden { position: absolute !important; height: 1px; width: 1px; overflow: hidden; clip: rect(1px, 1px, 1px, 1px); white-space: nowrap; }
+
+        /* Allocation & candidate highlighting */
+        .block.is-allocated { outline: 3px solid #28a745; outline-offset: -2px; }
+        .block.is-candidate { box-shadow: inset 0 0 0 3px var(--primary-color); }
+
+        /* Table panel */
+        #table-panel { width: clamp(300px, 85vw, 1200px); margin-top: 20px; background-color: var(--card-bg); border-radius: 10px; border: 1px solid var(--border-color); box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #table-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; border-bottom: 1px solid var(--border-color); gap: 10px; flex-wrap: wrap; }
+        #table-controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        #subnet-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        #subnet-table th, #subnet-table td { border-bottom: 1px solid var(--border-color); padding: 8px 10px; text-align: left; }
+        #subnet-table th { font-weight: 500; }
+
+        /* Binary overlay */
+        #binary-panel { margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px; }
+        #binary-toggle { margin-top: 6px; }
+        .bits-line { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; display: flex; gap: 6px; align-items: center; }
+        .bits-label { width: 56px; opacity: 0.8; }
+        .bits { display: grid; grid-template-columns: repeat(32, var(--bit-size)); column-gap: 1px; row-gap: 1px; align-items: center; width: 100%; }
+        .bit { width: var(--bit-size); height: var(--bit-size); line-height: var(--bit-size); font-size: 10px; display: inline-flex; align-items: center; justify-content: center; border-radius: 3px; border: 1px solid var(--border-color); overflow: hidden; }
+        /* Octet dividers after 8, 16, 24 bits */
+        #bits-address .bit:nth-child(9), #bits-address .bit:nth-child(17), #bits-address .bit:nth-child(25),
+        #bits-mask .bit:nth-child(9), #bits-mask .bit:nth-child(17), #bits-mask .bit:nth-child(25) {
+            box-shadow: -2px 0 0 0 var(--border-color);
+        }
+        /* Visual divider between octets */
+        .bit:nth-child(8n) { box-shadow: 2px 0 0 0 var(--border-color); }
+        .bit.net { background: rgba(0,123,255,0.25); }
+        .bit.host { background: rgba(0,0,0,0.05); }
+        .octet-gap { display: none; }
+        #binary-mask { margin-top: 6px; font-size: 12px; opacity: 0.9; }
+        #explanation { margin-top: 8px; font-size: 12px; opacity: 0.9; }
+        /* --- Modern UI overrides (visual-only, preserves behavior) --- */
+        :root {
+          --primary-color: #5b8cff;
+          --primary-hover: #4a76e8;
+          --active-color: #3b66d6;
+          --card-bg: rgba(255,255,255,0.65);
+          --text-color: #1f2937;
+          --muted-text: #6b7280;
+          --border-color: rgba(17,24,39,.08);
+          --border-color-blocks: rgba(17,24,39,.08);
+          --grid-line: rgba(17,24,39,.04);
+          --bit-size: 12px;
+          --transition-speed: 0.25s;
+        }
+        body { background: radial-gradient(1200px 800px at 10% 0%, #eef2ff 0%, #f7f8fb 40%, #f3f5f9 100%); }
+        body.dark-mode { background: #000 !important; }
+        h1 { letter-spacing: -0.02em; }
+        p { color: var(--muted-text); }
+        #controls { position: sticky; top: 12px; z-index: 200; margin-bottom: 22px; padding: 10px 12px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: center; background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: 0 6px 18px rgba(24,33,77,.08), 0 1px 2px rgba(24,33,77,.08); }
+        .cmd-bar { gap: 14px; }
+        .cmd-group { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 12px; background: rgba(255,255,255,.35); border: 1px solid var(--border-color); }
+        .cmd-group.module { background: rgba(255,255,255,.45); }
+        .cmd-select { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--border-color); background: rgba(255,255,255,.7); font-size: 13px; }
+        .cmd-title { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted-text); margin-right: 2px; }
+        .icon { margin-right: 6px; display: inline-block; vertical-align: middle; color: currentColor; width: 16px; height: 16px; }
+        .icon-only { width: 36px; padding: 8px 0; text-align: center; }
+        .segmented { padding: 0; background: transparent; border: none; box-shadow: none; }
+        .segmented .segment { display:inline-flex; align-items:center; gap:6px; border-radius: 10px; padding: 9px 12px; background: rgba(255,255,255,.55); border: 1px solid var(--border-color); color: var(--text-color); }
+        .segmented.subtle .segment { background: rgba(255,255,255,.35); }
+        .segmented .segment + .segment { margin-left: 6px; }
+        .menus { background: transparent; border: none; box-shadow: none; padding: 0; gap: 10px; }
+        .menu { position: relative; }
+        .menu-trigger { padding: 9px 12px; border-radius: 10px; background: rgba(255,255,255,.55); border: 1px solid var(--border-color); font-weight: 600; color: var(--text-color); }
+        .menu-content { position: absolute; top: 100%; margin-top: 4px; right: 0; min-width: 220px; display: none; flex-direction: column; gap: 8px; padding: 12px; border-radius: 12px; background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); box-shadow: 0 10px 26px rgba(24,33,77,.12), 0 2px 6px rgba(24,33,77,.08); z-index: 600; }
+        .menu.open .menu-content { display: flex; }
+        .menu-content label { font-size: 11px; color: var(--muted-text); text-transform: uppercase; letter-spacing: .08em; }
+        .menu-content .full { width: 100%; justify-content: flex-start; color: var(--text-color); }
+        /* Ensure all command-bar buttons use text color (not white) on light chips */
+        .cmd-bar .secondary { color: var(--text-color); }
+        .cmd-bar .icon-only { color: var(--text-color); }
+        .macos-bar { justify-content: center; flex-wrap: wrap; }
+        button { padding: 9px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; letter-spacing: .01em; box-shadow: 0 6px 18px rgba(24,33,77,.08), 0 1px 2px rgba(24,33,77,.08); transition: transform var(--transition-speed) cubic-bezier(.2,.7,.3,1), box-shadow var(--transition-speed), background var(--transition-speed); }
+        button:hover { transform: translateY(-1px); box-shadow: 0 10px 26px rgba(24,33,77,.12), 0 2px 6px rgba(24,33,77,.08); }
+        button:focus-visible { outline: 3px solid rgba(91,140,255,.35); outline-offset: 2px; }
+        #container { background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: 0 10px 26px rgba(24,33,77,.12), 0 2px 6px rgba(24,33,77,.08); will-change: transform; }
+        /* Canvas polish */
+        #container { position: relative; }
+        #container::after { content:""; position:absolute; inset:0; pointer-events:none; background-image:
+            linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px),
+            linear-gradient(to right, var(--grid-line) 1px, transparent 1px);
+            background-size: 24px 24px; border-radius: 16px; }
+        .block { border-radius: 14px; position: relative; overflow: hidden; }
+        .block:hover { transform: translateY(-1px); box-shadow: 0 12px 22px rgba(24,33,77,.14); }
+        /* Block chips */
+        .block-label { position: absolute; top: 8px; left: 8px; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; color: var(--text-color); background: rgba(255,255,255,.72); border: 1px solid var(--border-color); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); box-shadow: 0 2px 6px rgba(24,33,77,.08); pointer-events: none; }
+        body.dark-mode .block-label { background: rgba(18,22,31,.7); border-color: rgba(255,255,255,0.12); }
+        .block-meta { position: absolute; bottom: 8px; right: 8px; font-size: 10px; color: var(--muted-text); background: rgba(255,255,255,.6); border: 1px solid var(--border-color); border-radius: 8px; padding: 2px 6px; pointer-events:none; }
+        body.dark-mode .block-meta { background: rgba(18,22,31,.6); border-color: rgba(255,255,255,0.12); color: #aeb4bf; }
+
+        /* Dark-mode component polish */
+        body.dark-mode .cmd-group { background: rgba(24,29,40,.45); border-color: rgba(255,255,255,.08); }
+        body.dark-mode .cmd-group.module { background: rgba(24,29,40,.55); }
+        body.dark-mode .segmented .segment { background: rgba(24,29,40,.55); border-color: rgba(255,255,255,.10); }
+        body.dark-mode .menu-trigger { background: rgba(24,29,40,.55); border-color: rgba(255,255,255,.10); color: var(--text-color); }
+        body.dark-mode .menu-content { background: rgba(20,25,35,.75); border-color: rgba(255,255,255,.10); }
+        body.dark-mode #container::after { background-image:
+            linear-gradient(to bottom, rgba(255,255,255,.06) 1px, transparent 1px),
+            linear-gradient(to right, rgba(255,255,255,.06) 1px, transparent 1px); }
+
+        /* Onboarding banner */
+        #onboarding-banner { position: sticky; top: calc(var(--toolbar-offset, 120px) + 8px); z-index: 450; display: flex; align-items: center; justify-content: space-between; width: clamp(300px, 85vw, 1200px); background: var(--card-bg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 12px; padding: 10px 12px; box-shadow: 0 6px 18px rgba(24,33,77,.08); margin-bottom: 10px; }
+        #onboarding-banner .ob-content { font-size: 13px; color: var(--text-color); }
+        #onboarding-banner .ob-actions { display: flex; gap: 8px; }
+        body.is-panning { user-select: none; cursor: grabbing; }
+        /* Quick ribbon */
+        #quick-ribbon { width: clamp(300px, 85vw, 1200px); display:flex; align-items:center; justify-content: space-between; gap: 8px; background: var(--card-bg); -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); border:1px solid var(--border-color); border-radius: 12px; padding: 8px 10px; box-shadow: 0 6px 18px rgba(24,33,77,.06); margin-bottom: 8px; }
+        #quick-ribbon .qr-left, #quick-ribbon .qr-right { display:flex; align-items:center; gap: 8px; flex-wrap: wrap; }
+        .chip { padding: 6px 10px; border-radius: 999px; border:1px solid var(--border-color); background: rgba(255,255,255,.65); color: var(--text-color); font-size: 12px; box-shadow: 0 2px 6px rgba(24,33,77,.06); cursor: pointer; }
+        .chip.secondary { background: rgba(255,255,255,.45); }
+        body.dark-mode .chip { background: rgba(24,29,40,.55); border-color: rgba(255,255,255,.10); }
+        .chip.group { display:flex; align-items:center; gap: 6px; }
+        .chip-select { padding: 4px 6px; border-radius: 8px; border:1px solid var(--border-color); background: rgba(255,255,255,.8); font-size: 12px; }
+        body.dark-mode .chip-select { background: rgba(24,29,40,.6); border-color: rgba(255,255,255,.10); color: var(--text-color); }
+        .chip.action { padding: 6px 8px; }
+
+        /* Binary bits pair (address + mask locked columns) */
+        .bits-pair { display: grid; grid-template-columns: 56px repeat(32, var(--bit-size)); column-gap: 1px; row-gap: 6px; align-items: center; }
+        .bits-pair .pair-label { opacity: .8; font-weight: 600; font-size: 12px; }
+        .bits-pair .bits { display: contents; }
+
+        /* Canvas tips overlay */
+        #tips-toggle { position:absolute; top:10px; right:10px; z-index:120; }
+        #canvas-tips { position:absolute; top:42px; right:10px; z-index:120; max-width:260px; background: var(--card-bg); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border:1px solid var(--border-color); border-radius:12px; padding:10px 12px; font-size:12px; color: var(--text-color); box-shadow: 0 6px 18px rgba(24,33,77,.08); display:none; }
+        #canvas-tips ul { margin: 6px 0 0; padding-left: 18px; }
+
+        /* Command palette */
+        #cmdk-dialog { width: 640px; padding: 0; }
+        #cmdk-header { display:flex; align-items:center; gap:8px; padding: 10px 12px; border-bottom:1px solid var(--border-color); }
+        #cmdk-input { width:100%; padding:10px 12px; font-size:14px; border:1px solid var(--border-color); border-radius:8px; background: rgba(255,255,255,.7); color: var(--text-color); }
+        body.dark-mode #cmdk-input { background: rgba(24,29,40,.6); border-color: rgba(255,255,255,.1); color: var(--text-color); }
+        #cmdk-list { max-height: 300px; overflow:auto; padding: 8px 0; }
+        .cmdk-item { width:100%; text-align:left; padding:10px 14px; background: transparent; border:0; border-bottom:1px solid var(--border-color); color: var(--text-color); cursor:pointer; }
+        .cmdk-item:hover, .cmdk-item.active { background: rgba(91,140,255,.08); }
+
+        /* Coachmarks */
+        @keyframes pulseCoach { 0% { box-shadow: 0 0 0 0 rgba(91,140,255,.45);} 70% { box-shadow: 0 0 0 12px rgba(91,140,255,0);} 100% { box-shadow: 0 0 0 0 rgba(91,140,255,0);} }
+        .coach { animation: pulseCoach 1.6s ease-out infinite; }
+        .block.is-selected { outline: 3px solid rgba(91,140,255,.5); outline-offset: -2px; box-shadow: 0 0 0 8px rgba(91,140,255,.08); }
+        #details-panel { background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: 0 10px 26px rgba(24,33,77,.12), 0 2px 6px rgba(24,33,77,.08); }
+        #log-panel, #table-panel { background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); border-radius: 16px; box-shadow: 0 6px 18px rgba(24,33,77,.08), 0 1px 2px rgba(24,33,77,.08); overflow: hidden; }
+        #table-header { padding: 12px 16px; }
+        #subnet-table thead th { background: rgba(255,255,255,.35); font-weight: 600; }
+        #subnet-table tbody tr:hover { background: rgba(91,140,255,.06); }
+        dialog { border-radius: 12px; padding: 22px; box-shadow: 0 10px 26px rgba(24,33,77,.15); background: var(--card-bg); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--border-color); }
+        dialog::backdrop { background: radial-gradient(600px 400px at 50% 30%, rgba(91,140,255,.25), rgba(17,24,39,.6)); }
+        dialog input[type="text"] { padding: 12px; border-radius: 10px; background: rgba(255,255,255,.65); }
+        /* Mini-map polish */
+        #minimap { background: rgba(17,24,39,.05); border: 1px solid var(--border-color); border-radius: 8px; box-shadow: 0 6px 18px rgba(24,33,77,.08); }
+        #minimap-view { border: 2px solid var(--primary-color); background: rgba(91,140,255,.15); border-radius: 3px; }
+        /* Micro animations */
+        @keyframes rise { from { transform: translateY(6px); opacity: 0 } to { transform: translateY(0); opacity: 1 } }
+        #log-panel, #table-panel, #container { animation: rise var(--transition-speed) cubic-bezier(.2,.7,.3,1); }
+    </style>
+</head>
+<body>
+    <!-- Inline SVG sprite for consistent, semantic icons (no dependencies) -->
+    <svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true" focusable="false">
+        <symbol id="icon-address" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="14" rx="2"/>
+            <path d="M8 17v3m8-3v3"/>
+            <circle cx="12" cy="10" r="2.5"/>
+        </symbol>
+        <symbol id="icon-plan" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/>
+            <rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/>
+            <path d="M14 14h7v7h-7z"/>
+        </symbol>
+        <symbol id="icon-join" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.5 13.5l3-3"/>
+            <path d="M7 12a5 5 0 0 1 5-5h1"/>
+            <path d="M17 12a5 5 0 0 1-5 5h-1"/>
+        </symbol>
+        <symbol id="icon-undo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M7 7l-4 4 4 4"/>
+            <path d="M3 11h9a5 5 0 1 1 0 10h-2"/>
+        </symbol>
+        <symbol id="icon-redo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 7l4 4-4 4"/>
+            <path d="M21 11h-9a5 5 0 1 0 0 10h2"/>
+        </symbol>
+        <symbol id="icon-reset" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 12a9 9 0 1 0 3-6.7"/>
+            <path d="M3 4v4h4"/>
+        </symbol>
+        <symbol id="icon-fit" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 9V5h4M21 9V5h-4M3 15v4h4M21 15v4h-4"/>
+        </symbol>
+        <symbol id="icon-compass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M8 16l3-7 5 5-8 2z"/>
+        </symbol>
+        <symbol id="icon-move" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v20M2 12h20"/>
+            <path d="M8 6l4-4 4 4M8 18l4 4 4-4M6 8L2 12l4 4M18 8l4 4-4 4"/>
+        </symbol>
+        <symbol id="icon-clear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 20h12"/>
+            <path d="M6 17l10-10 4 4-10 10z"/>
+            <path d="M14 7l3 3"/>
+        </symbol>
+        <symbol id="icon-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 1 0-7l1-1a5 5 0 0 1 7 7l-1 1"/>
+            <path d="M14 11a5 5 0 0 1 0 7l-1 1a5 5 0 0 1-7-7l1-1"/>
+        </symbol>
+        <symbol id="icon-load" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3v12"/>
+            <path d="M8 11l4 4 4-4"/>
+            <rect x="3" y="17" width="18" height="4" rx="1"/>
+        </symbol>
+        <symbol id="icon-image" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <circle cx="8" cy="9" r="2"/>
+            <path d="M21 18l-6-6-5 5-4-4-3 3"/>
+        </symbol>
+        <symbol id="icon-filecode" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H8a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7z"/>
+            <path d="M14 2v5h5"/>
+            <path d="M10 13l-2 2 2 2M14 17l2-2-2-2"/>
+        </symbol>
+        <symbol id="icon-compress" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6"/>
+        </symbol>
+    </svg>
+    <h1>CIDR Subnetting Visualizer</h1>
+    <div id="controls" class="cmd-bar macos-bar">
+        <!-- Left: Profile + Theme -->
+        <div class="cmd-group">
+            <div class="cmd-title">Profile</div>
+            <select id="profileSelect" title="Reserved address profile" class="cmd-select">
+                <option value="none">No Cloud Reservations</option>
+                <option value="azure">Azure (4 + 1)</option>
+                <option value="aws">AWS (4 + 1)</option>
+                <option value="gcp">GCP (4 + 1)</option>
+                <option value="custom">Custom…</option>
+            </select>
+            <button id="customProfileButton" title="Configure custom reserved IPs (head/tail)" class="secondary" style="display:none;">Configure</button>
+            <button id="darkModeButton" class="secondary icon-only" title="Toggle light/dark theme">☾</button>
+        </div>
+
+        <!-- Center: Primary segmented actions -->
+        <!-- Primary actions moved to Quick Ribbon below -->
+        <div class="cmd-group segmented" style="display:none"></div>
+        <div class="cmd-group module">
+            <div class="cmd-title">History</div>
+            <div class="segmented subtle">
+                <button id="undoButton" title="Undo" class="segment" disabled><svg class="icon"><use href="#icon-undo"/></svg><span>Undo</span></button>
+                <button id="redoButton" title="Redo" class="segment" disabled><svg class="icon"><use href="#icon-redo"/></svg><span>Redo</span></button>
+                <button id="resetButton" title="Reset workspace" class="segment" disabled><svg class="icon"><use href="#icon-reset"/></svg><span>Reset</span></button>
+            </div>
+        </div>
+
+        <!-- View controls (quick) -->
+        <div class="cmd-group module">
+            <div class="cmd-title">View</div>
+            <div class="segmented subtle">
+                <button id="fitViewButton" title="Fit to screen" class="segment"><svg class="icon"><use href="#icon-fit"/></svg><span>Fit</span></button>
+                <button id="panModeButton" title="Pan mode" class="segment"><svg class="icon"><use href="#icon-move"/></svg><span>Pan</span></button>
+                <button id="resetViewButton" title="Reset view" class="segment"><svg class="icon"><use href="#icon-compass"/></svg><span>Reset View</span></button>
+            </div>
+        </div>
+
+        <!-- Menus: modern macOS-style flyouts -->
+        <div class="cmd-group menus">
+            <div class="menu">
+                <button class="menu-trigger">View ▾</button>
+                <div class="menu-content">
+                    <label>Next Fit</label>
+                    <select id="nextFitPrefix" title="Find Next Fit by /prefix" class="cmd-select full">
+                        <option value="">Choose…</option>
+                    </select>
+                    <button id="clearHighlightsButton" class="secondary full"><svg class="icon" width="16" height="16"><use href="#icon-clear"/></svg><span>Clear Highlights</span></button>
+                </div>
+            </div>
+            <div class="menu">
+                <button class="menu-trigger">Share ▾</button>
+                <div class="menu-content">
+                    <button id="copyLinkButton" class="secondary full"><svg class="icon" width="16" height="16"><use href="#icon-link"/></svg><span>Share Link</span></button>
+                    <button id="loadJsonButton" class="secondary full"><svg class="icon" width="16" height="16"><use href="#icon-load"/></svg><span>Load JSON</span></button>
+                </div>
+            </div>
+            <div class="menu">
+                <button class="menu-trigger">Export ▾</button>
+                <div class="menu-content">
+                    <button id="exportPngButton" class="full"><svg class="icon" width="16" height="16"><use href="#icon-image"/></svg><span>PNG</span></button>
+                    <button id="exportSvgButton" class="full"><svg class="icon" width="16" height="16"><use href="#icon-filecode"/></svg><span>SVG</span></button>
+                </div>
+            </div>
+            <div class="menu">
+                <button class="menu-trigger">Display ▾</button>
+                <div class="menu-content">
+                    <label>Labels</label>
+                    <select id="labelDensity" title="Label density" class="cmd-select full">
+                        <option value="minimal">Minimal</option>
+                        <option value="normal" selected>Normal</option>
+                        <option value="verbose">Verbose</option>
+                    </select>
+                    <label>Animations</label>
+                    <select id="animSelect" title="Animation profile" class="cmd-select full">
+                        <option value="normal" selected>Normal</option>
+                        <option value="reduced">Reduced</option>
+                        <option value="off">Off</option>
+                    </select>
+                    <button id="compactToggle" class="secondary full"><svg class="icon" width="16" height="16"><use href="#icon-compress"/></svg><span>Compact Mode</span></button>
+                </div>
+            </div>
+            <div class="menu">
+                <button class="menu-trigger" title="Help and shortcuts">Help ▾</button>
+                <div class="menu-content">
+                    <button id="help-overview" class="full">Product Overview</button>
+                    <button id="help-nextfit" class="full">What is Next Fit?</button>
+                    <button id="help-shortcuts" class="full">Keyboard Shortcuts</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div id="envelope-label"></div>
+    <div id="quick-ribbon" class="fade-in">
+        <div class="qr-left">
+            <button id="qa-address" class="chip"><strong>Address</strong></button>
+            <button id="qa-plan" class="chip">Plan</button>
+            <button id="qa-join" class="chip" title="Join selected sibling blocks" disabled>Join</button>
+            <div class="chip group">
+                <span>Find Fit</span>
+                <select id="qa-nextfit" class="chip-select"></select>
+                <button id="qa-highlight" class="chip action">Highlight</button>
+                <button id="qa-clear" class="chip action secondary">Clear</button>
+            </div>
+        </div>
+        <div class="qr-right">
+            <button id="qa-seed" class="chip" title="Load a sample /24 now">Sample /24</button>
+            <button id="qa-help" class="chip secondary">Help</button>
+        </div>
+    </div>
+    <div id="viewport" style="width: clamp(300px, 85vw, 1200px); height: 75vh; position: relative; overflow: hidden; border-radius: 10px; border: 2px solid var(--border-color); background-color: var(--card-bg); box-shadow: 0 4px 10px rgba(0,0,0,0.1); margin-bottom: 20px; touch-action: none;">
+        <button id="tips-toggle" class="chip secondary" title="Show tips">Tips</button>
+        <div id="canvas-tips">
+            <strong>Tips</strong>
+            <ul>
+                <li>Shift + Drag or Pan Mode — pan the canvas</li>
+                <li>Scroll — zoom to cursor</li>
+                <li>Click a block to select; Enter to split</li>
+                <li>View → Next Fit or use Find Fit in the ribbon</li>
+                <li>Double‑click Subnet Details header to reset its position</li>
+            </ul>
+        </div>
+        <div id="container" style="position:absolute; inset:0; transform-origin:0 0; transition: transform var(--transition-speed);"></div>
+        <div id="minimap" aria-label="Mini-map" style="position:absolute; right:10px; bottom:10px; width:140px; height:90px; border:1px solid var(--border-color); background: rgba(0,0,0,0.05); border-radius:4px; pointer-events:none;"><div id="minimap-view" style="position:absolute; border:2px solid var(--primary-color); background: rgba(0,123,255,0.15); border-radius:2px;"></div></div>
+    </div>
+    <div id="details-panel" class="details-panel-hidden">
+        <h2 class="details-body">Subnet Details</h2>
+        <div id="details-dock-tab" class="details-tab">Subnet Details</div>
+        <div id="details-content" class="details-body">
+            <p><strong>CIDR:</strong> <span id="details-cidr">N/A</span></p>
+            <p><strong>Network Address:</strong> <span id="details-network">N/A</span></p>
+            <p><strong>Usable Range:</strong> <span id="details-usable">N/A</span> <button id="whyUsable" title="Explain calculation" style="margin-left:6px; padding:2px 6px; font-size:12px;">Why?</button></p>
+            <p><strong>Broadcast Address:</strong> <span id="details-broadcast">N/A</span></p>
+            <p><strong>Subnet Mask:</strong> <span id="details-mask">N/A</span></p>
+            <p><strong>IPs:</strong> <span id="details-ips">N/A</span></p>
+            <div id="details-ip-viz" class="ip-viz"></div>
+            <p id="details-notice" style="font-size:12px; opacity:0.8; margin-top:8px;"></p>
+            <div id="binary-panel">
+                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                    <button id="binary-toggle">Binary Overlay</button>
+                    <label for="binary-slider">Boundary (/prefix):</label>
+                    <input type="range" id="binary-slider" min="0" max="32" value="24">
+                    <span id="binary-prefix-label">/24</span>
+                </div>
+                <div id="bits-pair" class="bits-pair">
+                    <div class="pair-label">Address</div>
+                    <div id="bits-address" class="bits"></div>
+                    <div class="pair-label">Mask</div>
+                    <div id="bits-mask" class="bits"></div>
+                </div>
+                <div id="binary-address-text" style="margin-top:4px; font-size:12px; opacity:0.9;"></div>
+                <div id="binary-mask"></div>
+            </div>
+            <div id="explanation"></div>
+        </div>
+        <button id="details-split-button" class="details-body">Split Subnet</button>
+    </div>
+    <div id="log-panel">
+        <div id="log-header">Activity Log</div>
+        <div id="log-content"></div>
+    </div>
+    <div id="table-panel">
+        <div id="table-header">
+            <div>Subnets</div>
+            <div id="table-controls">
+                <label for="filterAllocated" class="visually-hidden">Filter</label>
+                <select id="filterAllocated">
+                    <option value="all">All</option>
+                    <option value="allocated">Allocated</option>
+                    <option value="unallocated">Unallocated</option>
+                </select>
+                <label for="sortBy" class="visually-hidden">Sort by</label>
+                <select id="sortBy">
+                    <option value="start">Sort: Start IP</option>
+                    <option value="prefix">Sort: Prefix</option>
+                    <option value="size">Sort: Size</option>
+                </select>
+                <button id="copyCsvButton" title="Copy current table to CSV">Copy CSV</button>
+            </div>
+        </div>
+        <div>
+            <table id="subnet-table" aria-label="Subnets">
+                <thead>
+                    <tr><th>CIDR</th><th>Usable</th><th>Status</th><th>Group</th></tr>
+                </thead>
+                <tbody id="subnet-table-body"></tbody>
+            </table>
+        </div>
+    </div>
+
+    
+    <div id="tooltip"></div>
+    <div id="onboarding-banner" class="fade-in" style="display:none;">
+        <div class="ob-content">
+            <strong>Welcome</strong> — Start by setting an Address, then Plan or use View → Next Fit to find space.
+        </div>
+        <div class="ob-actions">
+            <button id="ob-start" class="secondary">Start Tour</button>
+            <button id="ob-hide" class="secondary">Hide</button>
+        </div>
+    </div>
+    <dialog id="envelope-dialog">
+        <form id="envelope-form" method="dialog">
+            <h2>Set Address Space</h2>
+            <p id="envelope-disclaimer">This tool is for learning and visualization purposes.</p>
+            <div><label for="envelope-input">Address Space (CIDR):</label><input type="text" id="envelope-input" value="192.168.1.0/24" required pattern="^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/\d{1,2}$" title="e.g., 192.168.1.0/24"></div>
+            <div class="dialog-buttons"><button type="button" id="envelope-cancel" value="cancel">Cancel</button><button type="submit" id="envelope-ok" value="default">OK</button></div>
+        </form>
+    </dialog>
+
+    <!-- Help dialogs -->
+    <dialog id="help-dialog">
+        <h2>Subnet Visualizer — Overview</h2>
+        <p>This tool helps you plan and visualize IPv4 subnets. Set an Address (e.g., 10.0.0.0/16), then split/join blocks. Use Plan to auto‑allocate or View → Next Fit to highlight candidate space for a given /prefix.</p>
+        <ul>
+            <li><strong>Address</strong>: set the root CIDR envelope</li>
+            <li><strong>Plan</strong>: auto‑allocate requests (e.g., “/26 x3”, “hosts=50”)</li>
+            <li><strong>View → Next Fit</strong>: highlight where a /prefix can fit</li>
+            <li><strong>Display</strong>: labels, animations, and compact mode</li>
+        </ul>
+        <div class="dialog-buttons"><button id="help-close" value="cancel">Close</button></div>
+    </dialog>
+
+    <dialog id="nextfit-dialog">
+        <h2>What is Next Fit?</h2>
+        <p>Next Fit highlights all leaf blocks that can hold a given size. Pick a /prefix (e.g., /26) and candidates are highlighted. It respects cloud reservation profiles and /31 semantics.</p>
+        <ul>
+            <li>Skips allocated blocks</li>
+            <li>Skips leaves where target would have 0 usable IPs under the active profile</li>
+            <li>Use Split on a candidate, or run Plan to place automatically</li>
+        </ul>
+        <div class="dialog-buttons"><button id="nextfit-close" value="cancel">Close</button></div>
+    </dialog>
+
+    <dialog id="shortcuts-dialog">
+        <h2>Keyboard Shortcuts</h2>
+        <ul>
+            <li><strong>Shift + Drag</strong> or Pan Mode — pan the canvas</li>
+            <li><strong>Mousewheel</strong> — zoom to cursor</li>
+            <li><strong>Arrow keys</strong> — navigate sibling blocks</li>
+            <li><strong>Enter</strong> — split selected block</li>
+            <li><strong>Space</strong> — multi‑select sibling leaves</li>
+        </ul>
+        <div class="dialog-buttons"><button id="shortcuts-close" value="cancel">Close</button></div>
+    </dialog>
+
+    <!-- Command palette -->
+    <dialog id="cmdk-dialog">
+        <div id="cmdk-header"><input id="cmdk-input" type="text" placeholder="Type a command or ‘/26’ for Next Fit…" /></div>
+        <div id="cmdk-list"></div>
+    </dialog>
+
+    <dialog id="export-dialog">
+        <form id="export-form" method="dialog">
+            <h2>Export Options</h2>
+            <div>
+                <label><input type="checkbox" id="export-include-details" checked> Include details panel</label>
+            </div>
+            <div>
+                <label><input type="checkbox" id="export-include-legend" checked> Include legend</label>
+            </div>
+            <div class="dialog-buttons">
+                <button type="button" id="export-cancel" value="cancel">Cancel</button>
+                <button type="submit" id="export-ok" value="default">Export</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog id="profile-dialog">
+        <form id="profile-form" method="dialog">
+            <h2>Custom Reserved IPs</h2>
+            <p>Define reserved addresses at the start (head) and end (tail) of each subnet.</p>
+            <div>
+                <label for="profile-head">Head reserved:</label>
+                <input type="number" id="profile-head" min="0" max="256" value="2">
+            </div>
+            <div>
+                <label for="profile-tail">Tail reserved:</label>
+                <input type="number" id="profile-tail" min="0" max="256" value="1">
+            </div>
+            <div class="dialog-buttons"><button type="button" id="profile-cancel" value="cancel">Cancel</button><button type="submit" id="profile-ok" value="default">OK</button></div>
+        </form>
+    </dialog>
+
+    <dialog id="load-json-dialog">
+        <form id="load-json-form" method="dialog">
+            <h2>Load State from JSON</h2>
+            <textarea id="load-json-text" style="width:100%; height:200px;" placeholder='{"envelope":"10.0.0.0/24", ...}'></textarea>
+            <div class="dialog-buttons"><button type="button" id="load-json-cancel" value="cancel">Cancel</button><button type="submit" id="load-json-ok" value="default">Load</button></div>
+        </form>
+    </dialog>
+
+    <dialog id="plan-dialog">
+        <form id="plan-form" method="dialog">
+            <h2>Plan Subnets</h2>
+            <p>Enter one requirement per line. Examples:<br>
+            /26 x3<br>
+            hosts=50<br>
+            LabVLAN: /27 x2</p>
+            <textarea id="plan-text" style="width:100%; height:200px;" placeholder="/26 x3&#10;hosts=50&#10;LabVLAN: /27 x2"></textarea>
+            <div>
+                <label for="plan-heuristic">Heuristic:</label>
+                <select id="plan-heuristic" title="Packing strategy">
+                    <option value="closest" selected>Closest fit (min splits)</option>
+                    <option value="left">Left to right</option>
+                    <option value="largest">Largest space first</option>
+                </select>
+            </div>
+            <div class="dialog-buttons">
+                <button type="button" id="plan-cancel" value="cancel">Cancel</button>
+                <button type="submit" id="plan-ok" value="default">Auto-Allocate</button>
+            </div>
+        </form>
+    </dialog>
+
+    <div id="live-region" class="visually-hidden" aria-live="polite"></div>
+
+    <script defer>
+        document.addEventListener('DOMContentLoaded', () => {
+            const AZURE_RESERVED_IPS = 5;
+            const DEFAULT_RESERVED_PROFILES = {
+                // minPrefix indicates the smallest provider‑accepted prefix.
+                none:  { head: 0, tail: 0, minPrefix: 0 },   // no provider min
+                azure: { head: 4, tail: 1, minPrefix: 29 },  // /29
+                aws:   { head: 4, tail: 1, minPrefix: 28 },  // /28
+                gcp:   { head: 2, tail: 2, minPrefix: 29 },  // /29, 4 reserved total
+            };
+            const MAX_SPLIT_BLOCKS = 2048;
+            const container = document.getElementById('container');
+            const tooltip = document.getElementById('tooltip');
+            const envelopeLabel = document.getElementById('envelope-label');
+            const controlsBar = document.getElementById('controls');
+            const viewportEl = document.getElementById('viewport');
+            const worldEl = document.getElementById('container');
+            const minimap = document.getElementById('minimap');
+            const minimapView = document.getElementById('minimap-view');
+            const profileSelect = document.getElementById('profileSelect');
+            const customProfileButton = document.getElementById('customProfileButton');
+            const darkModeButton = document.getElementById('darkModeButton');
+            const joinButton = document.getElementById('joinButton');
+            const undoButton = document.getElementById('undoButton');
+            const redoButton = document.getElementById('redoButton');
+            const resetButton = document.getElementById('resetButton');
+            const setEnvelopeButton = document.getElementById('setEnvelopeButton');
+            const envelopeDialog = document.getElementById("envelope-dialog");
+            const envelopeForm = document.getElementById("envelope-form");
+            const envelopeInput = document.getElementById("envelope-input");
+            const envelopeCancelButton = document.getElementById("envelope-cancel");
+            const detailsPanel = document.getElementById('details-panel');
+            const detailsCidr = document.getElementById('details-cidr');
+            const detailsNetwork = document.getElementById('details-network');
+            const detailsUsable = document.getElementById('details-usable');
+            const detailsBroadcast = document.getElementById('details-broadcast');
+            const detailsMask = document.getElementById('details-mask');
+            const detailsIps = document.getElementById('details-ips');
+            const detailsSplitButton = document.getElementById('details-split-button');
+            const detailsNotice = document.getElementById('details-notice');
+            const whyUsableBtn = document.getElementById('whyUsable');
+            const explanationBox = document.getElementById('explanation');
+            const binaryPanel = document.getElementById('binary-panel');
+            const binaryToggle = document.getElementById('binary-toggle');
+            const binarySlider = document.getElementById('binary-slider');
+            const binaryPrefixLabel = document.getElementById('binary-prefix-label');
+            const bitsAddress = document.getElementById('bits-address');
+            const bitsMask = document.getElementById('bits-mask');
+            const binaryMaskText = document.getElementById('binary-mask');
+            const binaryAddressText = document.getElementById('binary-address-text');
+            const labelDensitySelect = document.getElementById('labelDensity');
+            const copyLinkButton = document.getElementById('copyLinkButton');
+            const loadJsonButton = document.getElementById('loadJsonButton');
+            const fitViewButton = document.getElementById('fitViewButton');
+            const resetViewButton = document.getElementById('resetViewButton');
+            const exportPngButton = document.getElementById('exportPngButton');
+            const exportSvgButton = document.getElementById('exportSvgButton');
+            const panModeButton = document.getElementById('panModeButton');
+            const exportDialog = document.getElementById('export-dialog');
+            const exportForm = document.getElementById('export-form');
+            const exportCancel = document.getElementById('export-cancel');
+            const exportOk = document.getElementById('export-ok');
+            const exportIncludeDetails = document.getElementById('export-include-details');
+            const exportIncludeLegend = document.getElementById('export-include-legend');
+            const loadJsonDialog = document.getElementById('load-json-dialog');
+            const loadJsonForm = document.getElementById('load-json-form');
+            const loadJsonText = document.getElementById('load-json-text');
+            const loadJsonCancel = document.getElementById('load-json-cancel');
+            const profileDialog = document.getElementById('profile-dialog');
+            const profileForm = document.getElementById('profile-form');
+            const profileHeadInput = document.getElementById('profile-head');
+            const profileTailInput = document.getElementById('profile-tail');
+            const profileCancelButton = document.getElementById('profile-cancel');
+            const liveRegion = document.getElementById('live-region');
+            const planButton = document.getElementById('planButton');
+            const planDialog = document.getElementById('plan-dialog');
+            const planForm = document.getElementById('plan-form');
+            const planText = document.getElementById('plan-text');
+            const planHeuristicSelect = document.getElementById('plan-heuristic');
+            let planHeuristic = 'closest';
+            if (planHeuristicSelect) planHeuristicSelect.addEventListener('change', ()=> planHeuristic = planHeuristicSelect.value || 'closest');
+            const planCancel = document.getElementById('plan-cancel');
+            const nextFitPrefix = document.getElementById('nextFitPrefix');
+            const clearHighlightsButton = document.getElementById('clearHighlightsButton');
+            const filterAllocated = document.getElementById('filterAllocated');
+            const sortBySelect = document.getElementById('sortBy');
+            const copyCsvButton = document.getElementById('copyCsvButton');
+            const subnetTableBody = document.getElementById('subnet-table-body');
+            const compactToggle = document.getElementById('compactToggle');
+            const animSelect = document.getElementById('animSelect');
+
+            let undoStack = [];
+            let redoStack = [];
+            let rootBlock = null;
+            let initialEnvelope = "";
+            let profileName = 'none';
+            let reservedHead = 0;
+            let reservedTail = 0;
+            let selectedBlocks = new Set();
+            let activeBlock = null;
+            let labelDensity = 'normal';
+            let groupCounter = 1;
+            let binaryOverlayEnabled = false;
+            // Pan/zoom state
+            let scale = 1;
+            let panX = 0;
+            let panY = 0;
+            let isPanning = false;
+            let lastMouse = { x: 0, y: 0 };
+            let panMode = false; // if true, left-drag pans
+            let pendingExportFormat = null; // 'png' | 'svg'
+            
+
+            function ipToInt(ip) { return ip.split('.').reduce((res, octet) => (res << 8) | +octet, 0) >>> 0; }
+            function intToIp(num) { return `${(num >>> 24)}.${(num >> 16) & 0xFF}.${(num >> 8) & 0xFF}.${num & 0xFF}`; }
+            function parseCidr(cidrStr) { const parts = cidrStr.match(/^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\/(\d{1,2})$/); if (!parts) return null; const ipStr = parts[1]; const prefix = parseInt(parts[2], 10); if (isNaN(prefix) || prefix < 0 || prefix > 32) return null; const octets = ipStr.split('.'); if (octets.length !== 4 || octets.some(octet => +octet < 0 || +octet > 255)) return null; const ipInt = ipToInt(ipStr); return { ip: ipInt, prefix: prefix }; }
+            function getRandomColor() { const hue = Math.floor(Math.random() * 360); const saturation = 60 + Math.random() * 10; const lightness = 75 + Math.random() * 10; return `hsl(${hue}, ${saturation}%, ${lightness}%)`; }
+
+            function getAllDescendants(block) {
+                let descendants = [];
+                for (const child of block.children) {
+                    descendants.push(child);
+                    descendants.push(...getAllDescendants(child));
+                }
+                return descendants;
+            }
+
+            function getLeafBlocks() {
+                if (!rootBlock) return [];
+                const res = [];
+                const stack = [rootBlock];
+                while (stack.length) {
+                    const b = stack.pop();
+                    if (!b.children || b.children.length === 0) {
+                        res.push(b);
+                    } else {
+                        for (const c of b.children) stack.push(c);
+                    }
+                }
+                return res.sort((a,b)=>a.start-b.start);
+            }
+
+            function chooseLeafForPrefix(leaves, targetPrefix, heuristic, providerName) {
+                const prof = DEFAULT_RESERVED_PROFILES[providerName] || DEFAULT_RESERVED_PROFILES.none;
+                const minP = typeof prof.minPrefix === 'number' ? prof.minPrefix : 0;
+                if (targetPrefix < minP) return null;
+                const totalFor = (p) => Math.pow(2, 32 - p);
+                const candidates = leaves.filter(b => !b.allocated && b.prefix <= targetPrefix &&
+                    ( (reservedHead + reservedTail) <= 0 || totalFor(targetPrefix) > (reservedHead + reservedTail) )
+                );
+                if (candidates.length === 0) return null;
+                const key = (b) => ({
+                    splits: targetPrefix - b.prefix,
+                    size: totalFor(b.prefix),
+                    start: b.start >>> 0
+                });
+                if (heuristic === 'left') {
+                    candidates.sort((a,b)=> key(a).start - key(b).start);
+                } else if (heuristic === 'largest') {
+                    // Largest space first (smallest prefix value => biggest)
+                    candidates.sort((a,b)=> a.prefix - b.prefix || key(a).start - key(b).start);
+                } else {
+                    // Closest fit: minimal splits (prefix closest to target)
+                    candidates.sort((a,b)=> key(a).splits - key(b).splits || key(a).start - key(b).start);
+                }
+                return candidates[0];
+            }
+
+            function usableCountForPrefix(p) {
+                const total = Math.pow(2, 32 - p);
+                if ((reservedHead + reservedTail) > 0) return Math.max(0, total - (reservedHead + reservedTail));
+                if (p === 32) return 0;
+                if (p === 31) return 2;
+                return total - 2;
+            }
+
+            function prefixForHosts(hosts) {
+                for (let p = 32; p >= 0; p--) {
+                    if (usableCountForPrefix(p) >= hosts) return p;
+                }
+                return null;
+            }
+
+            function ensureLeafAtPrefix(block, targetPrefix) {
+                let current = block;
+                while (current.prefix < targetPrefix) {
+                    if (current.children.length === 0) current.split(current.prefix + 1);
+                    let next = current.children.find(c => !c.allocated);
+                    if (!next) next = current.children[0];
+                    current = next;
+                }
+                return current;
+            }
+
+            function clearCandidateHighlights() {
+                const all = rootBlock ? [rootBlock, ...getAllDescendants(rootBlock)] : [];
+                all.forEach(b => b.element.classList.remove('is-candidate'));
+            }
+
+            function highlightCandidatesForPrefix(targetPrefix) {
+                clearCandidateHighlights();
+                const leaves = getLeafBlocks();
+                const prof = DEFAULT_RESERVED_PROFILES[profileName] || DEFAULT_RESERVED_PROFILES.none;
+                // Enforce provider minimum: do not highlight subnets smaller than the minPrefix
+                if (typeof prof.minPrefix === 'number' && targetPrefix < prof.minPrefix) return;
+                leaves.forEach(b => {
+                    if (b.allocated) return;
+                    if (b.prefix <= targetPrefix) {
+                        const total = Math.pow(2, 32 - targetPrefix);
+                        if ((reservedHead + reservedTail) > 0 && total <= (reservedHead + reservedTail)) return;
+                        b.element.classList.add('is-candidate');
+                    }
+                });
+            }
+
+            function updateSubnetTable() {
+                if (!subnetTableBody) return;
+                const leaves = getLeafBlocks();
+                let rows = leaves.map(b => {
+                    const cidr = `${intToIp((b.start >>> 0))}/${b.prefix}`;
+                    const total = Math.pow(2, 32 - b.prefix);
+                    let usable;
+                    if ((reservedHead + reservedTail) > 0) usable = Math.max(0, total - (reservedHead + reservedTail));
+                    else if (b.prefix === 31) usable = 2; else if (b.prefix === 32) usable = 0; else usable = total - 2;
+                    return { start: b.start >>> 0, prefix: b.prefix, size: total, cidr, usable, status: b.allocated ? 'Allocated' : 'Unallocated', group: b.groupName || '' };
+                });
+                const filter = filterAllocated ? filterAllocated.value : 'all';
+                rows = rows.filter(r => filter === 'all' || (filter === 'allocated' ? r.status === 'Allocated' : r.status === 'Unallocated'));
+                const sortBy = sortBySelect ? sortBySelect.value : 'start';
+                rows.sort((a,b) => {
+                    if (sortBy === 'prefix') return a.prefix - b.prefix || a.start - b.start;
+                    if (sortBy === 'size') return a.size - b.size || a.start - b.start;
+                    return a.start - b.start;
+                });
+                subnetTableBody.innerHTML = rows.map(r => `<tr><td>${r.cidr}</td><td>${r.usable}</td><td>${r.status}</td><td>${r.group}</td></tr>`).join('');
+            }
+
+            // ----- Undo / Redo -----
+            function recomputeGridForParent(parent) {
+                if (!parent) return;
+                const count = parent.children.length;
+                if (count === 0) {
+                    parent.resetToLeafStyles();
+                    return;
+                }
+                parent.element.innerHTML = '';
+                parent.element.classList.add('is-split');
+                parent.element.style.display = 'grid';
+                parent.element.style.padding = '0';
+                parent.element.style.border = 'none';
+                const pw = parent.element.offsetWidth; const ph = parent.element.offsetHeight;
+                const grid = getGridDimensions(count, pw, ph);
+                parent.gridCols = grid.cols;
+                parent.element.style.gridTemplateColumns = `repeat(${grid.cols}, 1fr)`;
+                parent.element.style.gridTemplateRows = `repeat(${grid.rows}, 1fr)`;
+                parent.element.style.gap = '6px';
+                parent.children.forEach(ch => parent.element.appendChild(ch.element));
+            }
+
+            function restoreChildren(parent, infoArr) {
+                if (!parent || !infoArr || infoArr.length===0) return;
+                const frag = document.createDocumentFragment();
+                const newChildren = parent.children.slice();
+                infoArr.forEach(ci => {
+                    const child = new Block(ci.start, ci.prefix, frag);
+                    child.parent = parent;
+                    if (ci.color) child.color = ci.color;
+                    newChildren.push(child);
+                });
+                parent.children = newChildren.sort((a,b)=>a.start-b.start);
+                recomputeGridForParent(parent);
+            }
+
+            function performJoinByStarts(parent, starts) {
+                if (!parent || !starts || starts.length===0) return;
+                const startSet = new Set(starts);
+                parent.children = parent.children.filter(ch => {
+                    if (startSet.has(ch.start)) { ch.element.remove(); return false; }
+                    return true;
+                });
+                if (parent.children.length===0) parent.resetToLeafStyles(); else recomputeGridForParent(parent);
+            }
+
+            function undoLast() {
+                const act = undoStack.pop(); if (!act) return;
+                if (act.type === 'split') {
+                    // revert split: remove children and restore leaf
+                    const b = act.block; if (!b) return;
+                    b.children.forEach(ch => ch.element.remove());
+                    b.children = [];
+                    b.resetToLeafStyles();
+                    redoStack.push(act);
+                } else if (act.type === 'join') {
+                    // restore removed children into parent
+                    restoreChildren(act.parent, act.joinedChildren);
+                    redoStack.push(act);
+                }
+                updateControlStates(); updateSubnetTable(); hideDetailsPanel();
+            }
+
+            function redoLast() {
+                const act = redoStack.pop(); if (!act) return;
+                if (act.type === 'split') {
+                    const b = act.block; if (!b) return; b.split(act.newPrefix);
+                } else if (act.type === 'join') {
+                    const parent = act.parent; if (!parent) return;
+                    const starts = act.joinedChildren.map(j=>j.start);
+                    performJoinByStarts(parent, starts);
+                }
+                undoStack.push(act);
+                updateControlStates(); updateSubnetTable(); hideDetailsPanel();
+            }
+
+            // Ensure a root block exists (fallback initializer)
+            function ensureRootInitialized() {
+                try {
+                    if (!container) return;
+                    const hasChild = container.children && container.children.length > 0;
+                    if (rootBlock && hasChild) return;
+                    const env = initialEnvelope || '192.168.1.0/24';
+                    const parsed = parseCidr(env);
+                    if (!parsed) return;
+                    rootBlock = new Block(parsed.ip, parsed.prefix, container);
+                    rootBlock.element.style.width = '100%';
+                    rootBlock.element.style.height = '100%';
+                    if (!initialEnvelope) initialEnvelope = env;
+                    if (envelopeLabel) envelopeLabel.textContent = `Address Space: ${initialEnvelope}`;
+                    logAction(`Initialized ${intToIp(parsed.ip)}/${parsed.prefix} (auto).`);
+                } catch (e) {}
+            }
+
+            function logAction(message) {
+                const logContent = document.getElementById('log-content');
+                if (!logContent) return;
+                const entry = document.createElement('div');
+                entry.className = 'log-entry';
+                entry.textContent = message;
+                logContent.appendChild(entry);
+                logContent.scrollTop = logContent.scrollHeight; // Auto-scroll to bottom
+            }
+
+            function toBinary32(num) {
+                let s = (num >>> 0).toString(2).padStart(32, '0');
+                return s;
+            }
+
+            function dottedMaskFromPrefix(p) {
+                const mask = (p === 0) ? 0 : (0xFFFFFFFF << (32 - p)) >>> 0;
+                return intToIp(mask);
+            }
+
+            function renderBitsLine(container, bitString, prefix) {
+                if (!container) return;
+                container.innerHTML = '';
+                for (let i = 0; i < 32; i++) {
+                    const span = document.createElement('div');
+                    span.className = 'bit ' + (i < prefix ? 'net' : 'host');
+                    span.textContent = bitString[i];
+                    container.appendChild(span);
+                }
+            }
+
+            function updateBinaryOverlay(block) {
+                if (!binaryPanel) return;
+                binaryPanel.style.display = '';
+                const lines = binaryPanel.querySelectorAll('.bits-line');
+                const pair = document.getElementById('bits-pair');
+                if (!binaryOverlayEnabled || !block) {
+                    if (pair) pair.style.display = 'none';
+                    binaryMaskText.textContent = '';
+                    if (binarySlider) binarySlider.disabled = true;
+                    if (block && binarySlider && binaryPrefixLabel) {
+                        binarySlider.value = String(block.prefix);
+                        binaryPrefixLabel.textContent = `/${block.prefix}`;
+                    }
+                    return;
+                }
+                if (pair) pair.style.display = 'grid';
+                if (binarySlider) binarySlider.disabled = false;
+                const boundary = parseInt(binarySlider.value || String(block.prefix), 10);
+                binaryPrefixLabel.textContent = `/${boundary}`;
+                const addrBits = toBinary32(block.start);
+                const maskBits = toBinary32((boundary === 0) ? 0 : (0xFFFFFFFF << (32 - boundary)) >>> 0);
+                renderBitsLine(bitsAddress, addrBits, boundary);
+                renderBitsLine(bitsMask, maskBits, boundary);
+                binaryAddressText.textContent = '';
+                binaryMaskText.textContent = `Mask: ${dottedMaskFromPrefix(boundary)} (${maskBits.match(/.{1,8}/g).join(' ')})`;
+            }
+
+            function usableExplanation(block) {
+                const totalIPs = block.getTotalIPs();
+                const isReserved = (reservedHead + reservedTail) > 0;
+                if (isReserved) {
+                    const provider = (profileName && profileName !== 'custom') ? profileName.toUpperCase() : 'Custom';
+                    const usable = Math.max(0,totalIPs-(reservedHead+reservedTail));
+                    return `${provider} reservations: first ${reservedHead} and last ${reservedTail} IPs are reserved. Usable = total (${totalIPs}) − (${reservedHead} + ${reservedTail}) = ${usable}.`;
+                }
+                if (block.prefix === 31) {
+                    return 'RFC 3021: /31 has two hosts, no network/broadcast. Both addresses are usable (point-to-point).';
+                }
+                if (block.prefix === 32) {
+                    return 'A /32 is a single address; 0 usable host addresses.';
+                }
+                return 'Classic IPv4: Usable = total − 2 (network and broadcast are not usable).';
+            }
+
+            function showDetailsPanel() { if (detailsPanel) detailsPanel.classList.remove('details-panel-hidden'); }
+            function hideDetailsPanel() {
+                if (!detailsPanel) return;
+                // Dock to the right rather than hide completely, so the tab is still visible
+                detailsPanel.classList.remove('details-panel-hidden');
+                detailsPanel.classList.add('docked-right');
+            }
+
+            // Keep details panel clear of the sticky command bar
+            function updateToolbarOffset() {
+                if (!controlsBar) return;
+                const h = controlsBar.getBoundingClientRect().height || 0;
+                document.documentElement.style.setProperty('--toolbar-offset', `${Math.ceil(h)}px`);
+            }
+            // Run after layout and on subsequent size changes
+            requestAnimationFrame(updateToolbarOffset);
+            setTimeout(updateToolbarOffset, 200);
+            window.addEventListener('resize', updateToolbarOffset);
+            if (window.ResizeObserver) {
+                const ro = new ResizeObserver(updateToolbarOffset);
+                ro.observe(controlsBar);
+            }
+
+            function applyViewTransform() {
+                if (!worldEl || !viewportEl) return;
+                worldEl.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`;
+                // Minimap viewport box
+                const vw = viewportEl.clientWidth; const vh = viewportEl.clientHeight;
+                const miniW = minimap.clientWidth; const miniH = minimap.clientHeight;
+                const viewScaleX = 1/scale; const viewScaleY = 1/scale;
+                const boxW = Math.max(10, miniW * viewScaleX);
+                const boxH = Math.max(10, miniH * viewScaleY);
+                // Convert pan (content space) to mini-map space (assumes content equals viewport size at scale 1)
+                const offsetX = (-panX/ (vw*scale)) * miniW;
+                const offsetY = (-panY/ (vh*scale)) * miniH;
+                minimapView.style.width = boxW + 'px';
+                minimapView.style.height = boxH + 'px';
+                minimapView.style.left = `${offsetX}px`;
+                minimapView.style.top = `${offsetY}px`;
+            }
+
+            // Mini-map click/drag to move viewport
+            if (minimap) {
+                let draggingMini = false;
+                const startMove = (clientX, clientY) => {
+                    const rect = minimap.getBoundingClientRect();
+                    const x = clientX - rect.left; const y = clientY - rect.top;
+                    const vw = viewportEl.clientWidth; const vh = viewportEl.clientHeight;
+                    const miniW = minimap.clientWidth; const miniH = minimap.clientHeight;
+                    // Center viewport at clicked mini position
+                    panX = - (x/miniW)*vw*scale + vw/2;
+                    panY = - (y/miniH)*vh*scale + vh/2;
+                    applyViewTransform();
+                };
+                minimap.addEventListener('mousedown', (e) => { draggingMini = true; startMove(e.clientX, e.clientY); });
+                window.addEventListener('mousemove', (e) => { if (draggingMini) startMove(e.clientX, e.clientY); });
+                window.addEventListener('mouseup', () => { draggingMini = false; });
+                minimap.style.pointerEvents = 'auto';
+            }
+
+            function updateDetailsPanel(block) {
+                if (!block) {
+                    hideDetailsPanel();
+                    return;
+                }
+                const totalIPs = block.getTotalIPs();
+                const networkAddr = block.start;
+                const broadcastAddr = networkAddr + totalIPs - 1;
+                const subnetMask = intToIp((0xFFFFFFFF << (32 - block.prefix)) >>> 0);
+                let usableStart, usableEnd, usableCount;
+                const isReserved = (typeof reservedHead !== 'undefined' && typeof reservedTail !== 'undefined') && (reservedHead + reservedTail) > 0;
+                if (isReserved) {
+                    if (totalIPs > (reservedHead + reservedTail)) {
+                        usableStart = networkAddr + reservedHead;
+                        usableEnd = broadcastAddr - reservedTail;
+                        usableCount = totalIPs - (reservedHead + reservedTail);
+                    } else {
+                        usableStart = null;
+                        usableEnd = null;
+                        usableCount = 0;
+                    }
+                } else {
+                    if (block.prefix === 31) {
+                        // RFC 3021: /31 has two usable addresses, no broadcast
+                        usableStart = networkAddr;
+                        usableEnd = broadcastAddr;
+                        usableCount = 2;
+                    } else if (totalIPs > 2) {
+                        usableStart = networkAddr + 1;
+                        usableEnd = broadcastAddr - 1;
+                        usableCount = totalIPs - 2;
+                    } else {
+                        usableStart = null;
+                        usableEnd = null;
+                        usableCount = 0;
+                    }
+                }
+                detailsCidr.textContent = `${intToIp(networkAddr)}/${block.prefix}`;
+                detailsNetwork.textContent = intToIp(networkAddr);
+                if (block.prefix === 31) {
+                    detailsBroadcast.textContent = 'No broadcast (RFC 3021)';
+                } else {
+                    detailsBroadcast.textContent = intToIp(broadcastAddr);
+                }
+                detailsMask.textContent = subnetMask;
+                detailsIps.textContent = `${totalIPs} total, ${usableCount} usable`;
+                if (usableStart && usableEnd) {
+                    detailsUsable.textContent = `${intToIp(usableStart)} - ${intToIp(usableEnd)}`;
+                } else {
+                    detailsUsable.textContent = 'None';
+                }
+                if (detailsNotice) {
+                    if (!isReserved && block.prefix === 31) {
+                        detailsNotice.textContent = 'RFC 3021: /31 has two usable addresses and no broadcast.';
+                    } else if (isReserved) {
+                        detailsNotice.textContent = `Reserved profile in effect: head=${reservedHead}, tail=${reservedTail}.`;
+                    } else {
+                        detailsNotice.textContent = '';
+                    }
+                }
+                if (detailsSplitButton) {
+                    detailsSplitButton.disabled = block.children.length > 0 || block.prefix >= 32;
+                }
+
+                const ipVizContainer = document.getElementById('details-ip-viz');
+                ipVizContainer.innerHTML = ''; // Clear previous viz
+
+                if (totalIPs <= 1) {
+                    // Don't show viz for /32
+                    return;
+                }
+
+                if (isReserved) {
+                    const reservedStart = reservedHead;
+                    const reservedEnd = reservedTail;
+                    const usable = totalIPs - reservedStart - reservedEnd;
+
+                    if (usable > 0) {
+                        const startEl = document.createElement('div');
+                        startEl.className = 'ip-viz-segment';
+                        startEl.style.width = `${(reservedStart / totalIPs) * 100}%`;
+                        startEl.style.backgroundColor = 'var(--unusable-color)';
+                        startEl.innerHTML = `<span class="ip-viz-tooltip">Reserved: ${reservedStart} IPs</span>`;
+                        ipVizContainer.appendChild(startEl);
+
+                        const usableEl = document.createElement('div');
+                        usableEl.className = 'ip-viz-segment';
+                        usableEl.style.width = `${(usable / totalIPs) * 100}%`;
+                        usableEl.style.backgroundColor = 'var(--primary-color)';
+                        usableEl.innerHTML = `<span class="ip-viz-tooltip">Usable: ${usable} IPs</span>`;
+                        ipVizContainer.appendChild(usableEl);
+
+                        const endEl = document.createElement('div');
+                        endEl.className = 'ip-viz-segment';
+                        endEl.style.width = `${(reservedEnd / totalIPs) * 100}%`;
+                        endEl.style.backgroundColor = 'var(--unusable-color)';
+                        endEl.innerHTML = `<span class="ip-viz-tooltip">Reserved: ${reservedEnd} IP${reservedEnd!==1?'s':''}</span>`;
+                        ipVizContainer.appendChild(endEl);
+                    }
+                } else {
+                    if (block.prefix === 31) {
+                        const usableEl = document.createElement('div');
+                        usableEl.className = 'ip-viz-segment';
+                        usableEl.style.width = `100%`;
+                        usableEl.style.backgroundColor = 'var(--primary-color)';
+                        usableEl.innerHTML = `<span class="ip-viz-tooltip">Usable: 2 IPs (RFC 3021)</span>`;
+                        ipVizContainer.appendChild(usableEl);
+                    } else {
+                        const network = 1;
+                        const broadcast = 1;
+                        const usable = totalIPs - network - broadcast;
+
+                        if (totalIPs > 2) {
+                            const networkEl = document.createElement('div');
+                            networkEl.className = 'ip-viz-segment';
+                            networkEl.style.width = `${(network / totalIPs) * 100}%`;
+                            networkEl.style.backgroundColor = 'var(--unusable-color)';
+                            networkEl.innerHTML = `<span class="ip-viz-tooltip">Network: ${network} IP</span>`;
+                            ipVizContainer.appendChild(networkEl);
+
+                            const usableEl = document.createElement('div');
+                            usableEl.className = 'ip-viz-segment';
+                            usableEl.style.width = `${(usable / totalIPs) * 100}%`;
+                            usableEl.style.backgroundColor = 'var(--primary-color)';
+                            usableEl.innerHTML = `<span class="ip-viz-tooltip">Usable: ${usable} IPs</span>`;
+                            ipVizContainer.appendChild(usableEl);
+
+                            const broadcastEl = document.createElement('div');
+                            broadcastEl.className = 'ip-viz-segment';
+                            broadcastEl.style.width = `${(broadcast / totalIPs) * 100}%`;
+                            broadcastEl.style.backgroundColor = 'var(--unusable-color)';
+                            broadcastEl.innerHTML = `<span class="ip-viz-tooltip">Broadcast: ${broadcast} IP</span>`;
+                            ipVizContainer.appendChild(broadcastEl);
+                        }
+                    }
+                }
+            }
+
+            function getGridDimensions(numSubBlocks, parentWidth, parentHeight) {
+                if (parentWidth <= 0 || parentHeight <= 0 || numSubBlocks <= 0) {
+                    const sqrtNum = Math.ceil(Math.sqrt(numSubBlocks));
+                    return { rows: sqrtNum, cols: Math.ceil(numSubBlocks / sqrtNum) };
+                }
+                const targetRatio = parentWidth / parentHeight;
+                let bestRows = 1;
+                let bestCols = numSubBlocks;
+                let minDiff = Math.abs((bestCols / bestRows) - targetRatio);
+                for (let rows = 1; rows * rows <= numSubBlocks; rows++) {
+                    if (numSubBlocks % rows === 0) {
+                        const cols = numSubBlocks / rows;
+                        [ [rows, cols], [cols, rows] ].forEach(([r, c]) => {
+                            if (r * c === numSubBlocks) {
+                                const ratio = c / r;
+                                const diff = Math.abs(ratio - targetRatio);
+                                if (diff < minDiff) {
+                                    minDiff = diff;
+                                    bestRows = r;
+                                    bestCols = c;
+                                }
+                            }
+                        });
+                    }
+                }
+                return { rows: bestRows, cols: bestCols };
+            }
+
+            function isPowerOfTwo(n) { return n > 0 && (n & (n - 1)) === 0; }
+            function announce(msg) { const el = document.getElementById('live-region'); if (!el) return; el.textContent = ''; setTimeout(() => { el.textContent = msg; }, 0); }
+            
+            function validateJoinSelection(showAlerts = false) {
+                const selection = Array.from(selectedBlocks);
+                if (selection.length < 2) return false;
+                const firstBlock = selection[0];
+                const { parent, prefix } = firstBlock;
+                if (!parent || prefix <= 0) {
+                    if (showAlerts && !parent) alert("Cannot join root-level blocks.");
+                    return false;
+                }
+                if (!selection.every(b => b.parent === parent && b.prefix === prefix)) {
+                    if (showAlerts) alert("Selected blocks must be siblings of the same size.");
+                    return false;
+                }
+                if (!isPowerOfTwo(selection.length)) {
+                    if (showAlerts) alert(`Cannot join ${selection.length} blocks. The number must be a power of 2.`);
+                    return false;
+                }
+                // Warn if any selected blocks are allocated, but allow join on confirm
+                const hasAllocated = selection.some(b => b.allocated);
+                if (hasAllocated && showAlerts) {
+                    const ok = confirm('Warning: One or more selected blocks are allocated. Joining will remove those allocations. Continue?');
+                    if (!ok) return false;
+                }
+                selection.sort((a, b) => a.start - b.start);
+                const expectedBlockSize = firstBlock.getTotalIPs();
+                const potentialNewPrefix = prefix - Math.log2(selection.length);
+                const potentialNewMask = (potentialNewPrefix <= 0) ? 0 : (0xFFFFFFFF << (32 - potentialNewPrefix)) >>> 0;
+                if ((selection[0].start & potentialNewMask) >>> 0 !== selection[0].start) {
+                    if (showAlerts) alert(`The selected range does not form a valid /${potentialNewPrefix} block.`);
+                    return false;
+                }
+                for (let i = 0; i < selection.length - 1; i++) {
+                    if (selection[i].start + expectedBlockSize !== selection[i + 1].start) {
+                        if (showAlerts) alert("Selected blocks are not contiguous.");
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            function updateControlStates() {
+                if (!undoButton || !redoButton || !resetButton) return;
+                undoButton.disabled = undoStack.length === 0;
+                redoButton.disabled = redoStack.length === 0;
+                resetButton.disabled = !initialEnvelope;
+                const qaJoinEl = document.getElementById('qa-join');
+                const joinOk = validateJoinSelection(false);
+                if (typeof joinButton !== 'undefined' && joinButton) joinButton.disabled = !joinOk;
+                if (qaJoinEl) qaJoinEl.disabled = !joinOk;
+            }
+
+            function clearSelection() {
+                selectedBlocks.forEach(block => {
+                    if (block.element) block.element.classList.remove('is-selected');
+                });
+                selectedBlocks.clear();
+                if (activeBlock) {
+                    if (activeBlock.element) activeBlock.element.classList.remove('is-selected');
+                    activeBlock = null;
+                    hideDetailsPanel();
+                }
+                updateControlStates();
+            }
+
+            class Block {
+                constructor(startIpInt, prefix, parentElement) {
+                    this.start = startIpInt;
+                    this.prefix = prefix;
+                    this.children = [];
+                    this.container = parentElement;
+                    this.parent = null;
+                    this.color = getRandomColor();
+                    this.unusable = false;
+                    this.element = document.createElement('div');
+                    this.element.classList.add('block');
+                    this.element.style.backgroundColor = this.color;
+                    this.element._blockInstance = this;
+                    this.container.appendChild(this.element);
+                    this._addEventListeners();
+                    setTimeout(() => this.updateLabel(), 0);
+                }
+
+                resetToLeafStyles() {
+                    this.element.classList.remove('is-split');
+                    this.element.style.display = 'flex';
+                    this.element.style.padding = '8px';
+                    this.element.style.border = '1px solid var(--border-color-blocks)';
+                    this.element.style.aspectRatio = '2 / 1';
+                    this.element.style.backgroundColor = this.color;
+                    this.element.style.gridTemplateColumns = '';
+                    this.element.style.gridTemplateRows = '';
+                    this.element.style.gap = '';
+                    this.element.style.cursor = 'pointer';
+                    this.element.innerHTML = '';
+                    this.updateLabel();
+                }
+
+                getTotalIPs() { return Math.pow(2, 32 - this.prefix); }
+
+                checkUsable() {
+                    const isReserved = (reservedHead + reservedTail) > 0;
+                    if (isReserved) {
+                        this.unusable = this.getTotalIPs() <= (reservedHead + reservedTail);
+                    } else {
+                        // /31 is usable (RFC 3021); only /32 has zero usable in default mode
+                        this.unusable = this.prefix >= 32;
+                    }
+                    this.element.classList.toggle('is-unusable', this.unusable && isReserved);
+                }
+
+                updateLabel() {
+                    if (this.children.length > 0) {
+                        if (!this.element.classList.contains('is-split')) {
+                            this.element.innerHTML = "";
+                            this.element.classList.add('is-split');
+                            this.element.style.backgroundColor = "transparent";
+                            this.element.style.display = 'grid';
+                            this.element.style.padding = '0';
+                            this.element.style.border = 'none';
+                            this.element.style.aspectRatio = 'unset';
+                            this.element.style.cursor = 'default';
+                        }
+                        return;
+                    }
+                    if (this.element.classList.contains('is-split')) {
+                        this.resetToLeafStyles();
+                    }
+                    this.checkUsable();
+                    const totalIPs = this.getTotalIPs();
+                    let labelText;
+                    if (labelDensity === 'minimal') {
+                        labelText = `/${this.prefix}`;
+                    } else if (labelDensity === 'verbose') {
+                        const end = this.start + totalIPs - 1;
+                        labelText = `${intToIp(this.start)} - ${intToIp(end)} • /${this.prefix}`;
+                    } else {
+                        labelText = `${intToIp(this.start)}/${this.prefix}`;
+                    }
+                    const metaText = `${totalIPs} IPs`;
+                    this.element.innerHTML = `<span class="block-label">${labelText}</span><span class="block-meta">${metaText}</span>`;
+                    const endIp = this.start + totalIPs - 1;
+                    this.element.title = `${intToIp(this.start)} - ${intToIp(endIp)}`;
+                    this.element.setAttribute('role', 'button');
+                    this.element.setAttribute('aria-label', `Block ${intToIp(this.start)}/${this.prefix}, ${totalIPs} IPs`);
+                    this.element.tabIndex = 0;
+                }
+
+                promptSplit() {
+                    if (this.children.length > 0 || this.prefix >= 32) return;
+                    const suggestedPrefix = Math.min(this.prefix + 1, 32);
+                    const newPrefixStr = prompt(`Subdivide ${intToIp(this.start)}/${this.prefix}?\nEnter new prefix (> ${this.prefix}, ≤ 32):`, suggestedPrefix);
+                    if (newPrefixStr === null) return;
+                    const newPrefix = parseInt(newPrefixStr, 10);
+                    if (isNaN(newPrefix) || newPrefix <= this.prefix || newPrefix > 32) {
+                        alert(`Invalid prefix. Must be a number between ${this.prefix + 1} and 32.`);
+                        return;
+                    }
+                    this.split(newPrefix);
+                }
+
+                split(newPrefix) {
+                    if (this.children.length > 0) return;
+                    const numSubBlocks = Math.pow(2, newPrefix - this.prefix);
+                    if (numSubBlocks > MAX_SPLIT_BLOCKS) {
+                        alert(`Subdivision too fine: ${numSubBlocks} blocks requested (limit ${MAX_SPLIT_BLOCKS}).`);
+                        return;
+                    }
+                    const isReserved = (reservedHead + reservedTail) > 0;
+                    if (isReserved) {
+                        const potentialChildIPs = Math.pow(2, 32 - newPrefix);
+                        if (potentialChildIPs <= (reservedHead + reservedTail) && !confirm(`Warning: Subdividing to /${newPrefix} with reserved profile may result in 0 usable IPs. Continue?`)) return;
+                    }
+                    logAction(`Split ${intToIp(this.start)}/${this.prefix} into ${numSubBlocks} /${newPrefix} blocks.`);
+                    this.element.innerHTML = "";
+                    this.element.classList.add('is-split');
+                    this.element.style.display = 'grid';
+                    const parentWidth = this.element.offsetWidth;
+                    const parentHeight = this.element.offsetHeight;
+                    const grid = getGridDimensions(numSubBlocks, parentWidth, parentHeight);
+                    this.gridCols = grid.cols;
+                    this.element.style.gridTemplateColumns = `repeat(${grid.cols}, 1fr)`;
+                    this.element.style.gridTemplateRows = `repeat(${grid.rows}, 1fr)`;
+                    this.element.style.gap = "6px";
+                    const childSize = this.getTotalIPs() / numSubBlocks;
+                    const fragment = document.createDocumentFragment();
+                    const newChildren = [];
+                    for (let i = 0; i < numSubBlocks; i++) {
+                        const childStart = this.start + (i * childSize);
+                        const child = new Block(childStart, newPrefix, fragment);
+                        child.parent = this;
+                        newChildren.push(child);
+                    }
+                    this.children = newChildren;
+                    this.children.forEach(child => this.element.appendChild(child.element));
+                    undoStack.push({ type: 'split', block: this, newPrefix });
+                    redoStack = [];
+                    updateControlStates();
+                    hideDetailsPanel();
+                    updateSubnetTable();
+                }
+
+                _addEventListeners() {
+                    const self = this;
+                    this.element.addEventListener('click', (e) => {
+                        const t = e.target && e.target.closest ? e.target.closest('.block') : null;
+                        if (t !== self.element) return;
+                        e.stopPropagation();
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            if (self.children.length > 0 || !self.parent) return;
+                            if (activeBlock) {
+                                if (activeBlock.element) activeBlock.element.classList.remove('is-selected');
+                                activeBlock = null;
+                                hideDetailsPanel();
+                            }
+                            if (selectedBlocks.has(self)) {
+                                selectedBlocks.delete(self);
+                                self.element.classList.remove('is-selected');
+                            } else {
+                                if (selectedBlocks.size > 0 && (selectedBlocks.values().next().value.parent !== self.parent || selectedBlocks.values().next().value.prefix !== self.prefix)) {
+                                    alert("Cannot select blocks from different parents or with different sizes.");
+                                    return;
+                                }
+                                selectedBlocks.add(self);
+                                self.element.classList.add('is-selected');
+                            }
+                            updateControlStates();
+                            announce(`Selection size: ${selectedBlocks.size}`);
+                        } else {
+                            if (selectedBlocks.size > 0) clearSelection();
+                            if (activeBlock === self) {
+                                if (activeBlock.element) activeBlock.element.classList.remove('is-selected');
+                                activeBlock = null;
+                                hideDetailsPanel();
+                            } else {
+                                if (activeBlock && activeBlock.element) activeBlock.element.classList.remove('is-selected');
+                                activeBlock = self;
+                                if (activeBlock.element) activeBlock.element.classList.add('is-selected');
+                                updateDetailsPanel(activeBlock);
+                                showDetailsPanel();
+                                announce(`Focused ${intToIp(self.start)}/${self.prefix}`);
+                                const tabEl = document.getElementById('details-dock-tab');
+                                if (tabEl) {
+                                    tabEl.classList.add('tab-pulse');
+                                    setTimeout(()=> tabEl.classList.remove('tab-pulse'), 2000);
+                                }
+                                updateBinaryOverlay(activeBlock);
+                            }
+                        }
+                    });
+                    this.element.addEventListener('keydown', (e) => {
+                        if (self.children.length > 0) return; // only leafs are navigable
+                        const parent = self.parent;
+                        const moveToIndex = (idx) => {
+                            if (!parent || idx < 0 || idx >= parent.children.length) return;
+                            const next = parent.children[idx];
+                            if (activeBlock && activeBlock.element) activeBlock.element.classList.remove('is-selected');
+                            activeBlock = next;
+                            next.element.classList.add('is-selected');
+                            next.element.focus();
+                            updateDetailsPanel(next);
+                            showDetailsPanel();
+                            updateBinaryOverlay(next);
+                        };
+                        const idx = parent ? parent.children.indexOf(self) : -1;
+                        switch (e.key) {
+                            case 'ArrowLeft':
+                                if (idx >= 0) { e.preventDefault(); moveToIndex(idx - 1); }
+                                break;
+                            case 'ArrowRight':
+                                if (idx >= 0) { e.preventDefault(); moveToIndex(idx + 1); }
+                                break;
+                            case 'ArrowUp':
+                                if (idx >= 0 && parent && parent.gridCols) { e.preventDefault(); moveToIndex(idx - parent.gridCols); }
+                                break;
+                            case 'ArrowDown':
+                                if (idx >= 0 && parent && parent.gridCols) { e.preventDefault(); moveToIndex(idx + parent.gridCols); }
+                                break;
+                            case 'Enter':
+                                e.preventDefault(); self.promptSplit(); break;
+                            case ' ': // Space key
+                                e.preventDefault();
+                                if (!parent) return;
+                                if (selectedBlocks.size > 0) {
+                                    const first = selectedBlocks.values().next().value;
+                                    if (first.parent !== parent || first.prefix !== self.prefix) return;
+                                }
+                                if (selectedBlocks.has(self)) {
+                                    selectedBlocks.delete(self);
+                                    self.element.classList.remove('is-selected');
+                                } else {
+                                    selectedBlocks.add(self);
+                                    self.element.classList.add('is-selected');
+                                }
+                                updateControlStates();
+                                break;
+                        }
+                    });
+                    // Double-click leaf to prompt split
+                    this.element.addEventListener('dblclick', (e) => {
+                        const t = e.target && e.target.closest ? e.target.closest('.block') : null;
+                        if (t !== self.element) return;
+                        if (self.children.length === 0) self.promptSplit();
+                    });
+                }
+            }
+
+            function resetApp() {
+                undoStack = [];
+                redoStack = [];
+                container.innerHTML = "";
+                if (initialEnvelope) {
+                    envelopeLabel.textContent = `Address Space: ${initialEnvelope}`;
+                    const parsed = parseCidr(initialEnvelope);
+                    if (!parsed) { alert("Error: Invalid stored address space."); return; }
+                    clearSelection();
+                    rootBlock = new Block(parsed.ip, parsed.prefix, container);
+                    rootBlock.element.style.width = "100%";
+                    rootBlock.element.style.height = "100%";
+                    logAction(`Set address space to ${initialEnvelope}.`);
+                } else {
+                    try {
+                        if (envelopeDialog && envelopeDialog.showModal) {
+                            envelopeDialog.showModal();
+                        } else {
+                            throw new Error('dialog unsupported');
+                        }
+                    } catch (e) {
+                        // Fallback when <dialog> is unsupported or blocked: seed a default /24
+                        initialEnvelope = "192.168.1.0/24";
+                        envelopeLabel.textContent = `Address Space: ${initialEnvelope}`;
+                        const parsed2 = parseCidr(initialEnvelope);
+                        if (parsed2) {
+                            rootBlock = new Block(parsed2.ip, parsed2.prefix, container);
+                            rootBlock.element.style.width = "100%";
+                            rootBlock.element.style.height = "100%";
+                            logAction(`Set address space to ${initialEnvelope} (fallback).`);
+                        }
+                    }
+                }
+                updateControlStates();
+                updateSubnetTable();
+            }
+
+            function serializeBlock(block) {
+                return { start: block.start, prefix: block.prefix, children: block.children.map(serializeBlock) };
+            }
+            function serializeState() {
+                return {
+                    envelope: initialEnvelope,
+                    profile: profileName,
+                    reservedHead,
+                    reservedTail,
+                    darkMode: document.body.classList.contains('dark-mode'),
+                    labelDensity,
+                    tree: rootBlock ? serializeBlock(rootBlock) : null,
+                };
+            }
+            function applyTree(block, data) {
+                if (!data || !data.children || data.children.length === 0) return;
+                const newPrefix = data.children[0].prefix;
+                block.split(newPrefix);
+                data.children.sort((a,b)=>a.start-b.start);
+                for (let i=0; i<block.children.length; i++) {
+                    applyTree(block.children[i], data.children[i]);
+                }
+            }
+            function loadState(state) {
+                profileName = state.profile || 'none';
+                if (profileName in DEFAULT_RESERVED_PROFILES) {
+                    reservedHead = DEFAULT_RESERVED_PROFILES[profileName].head;
+                    reservedTail = DEFAULT_RESERVED_PROFILES[profileName].tail;
+                } else {
+                    reservedHead = state.reservedHead || 0;
+                    reservedTail = state.reservedTail || 0;
+                }
+                if (document.getElementById('profileSelect')) {
+                    const val = (profileName in DEFAULT_RESERVED_PROFILES) ? profileName : 'custom';
+                    document.getElementById('profileSelect').value = val;
+                    const btn = document.getElementById('customProfileButton');
+                    if (btn) btn.style.display = val === 'custom' ? '' : 'none';
+                }
+                labelDensity = state.labelDensity || 'normal';
+                if (document.getElementById('labelDensity')) document.getElementById('labelDensity').value = labelDensity;
+                initialEnvelope = state.envelope || '';
+                if (state.darkMode) document.body.classList.add('dark-mode'); else document.body.classList.remove('dark-mode');
+                resetApp();
+                if (rootBlock && state.tree) {
+                    applyTree(rootBlock, state.tree);
+                }
+                const allBlocks = [rootBlock, ...getAllDescendants(rootBlock)];
+                allBlocks.forEach(b => b.updateLabel());
+            }
+            function copyShareLink() {
+                const json = JSON.stringify(serializeState());
+                const hash = 'state=' + btoa(json);
+                const url = location.origin + location.pathname + '#' + hash;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(() => {}, () => {});
+                }
+                history.replaceState(null, '', '#' + hash);
+            }
+
+            function executeJoin() {
+                if (!validateJoinSelection(true)) return;
+                const selection = Array.from(selectedBlocks);
+                const parentBlock = selection[0].parent;
+                const originalPrefix = selection[0].prefix;
+                undoStack.push({ type: 'join', parent: parentBlock, joinedChildren: selection.map(b => ({ start: b.start, prefix: b.prefix, color: b.color })) });
+                redoStack = [];
+                selection.forEach(block => {
+                    parentBlock.children.splice(parentBlock.children.indexOf(block), 1);
+                    block.element.remove();
+                });
+                clearSelection();
+                if (parentBlock.children.length === 0) {
+                    parentBlock.resetToLeafStyles();
+                }
+                logAction(`Joined ${selection.length} /${originalPrefix} blocks back into parent /${parentBlock.prefix}.`);
+                updateControlStates();
+                updateSubnetTable();
+            }
+
+            // Event Listeners
+            envelopeForm.addEventListener("submit", (e) => {
+                e.preventDefault();
+                const cidr = envelopeInput.value.trim();
+                const parsed = parseCidr(cidr);
+                if (!parsed) { alert("Invalid CIDR format."); return; }
+                const mask = (parsed.prefix === 0) ? 0 : (0xFFFFFFFF << (32 - parsed.prefix)) >>> 0;
+                const networkAddress = (parsed.ip & mask) >>> 0;
+                if (parsed.ip !== networkAddress && parsed.prefix < 32) {
+                    const correctNetworkCidr = `${intToIp(networkAddress)}/${parsed.prefix}`;
+                    alert(`IP ${intToIp(parsed.ip)} is not a valid network address for that mask. Use: ${correctNetworkCidr}.`);
+                    envelopeInput.value = correctNetworkCidr;
+                    return;
+                }
+                initialEnvelope = `${intToIp(networkAddress)}/${parsed.prefix}`;
+                resetApp();
+                envelopeDialog.close();
+            });
+            envelopeCancelButton.addEventListener("click", () => { envelopeDialog.close(); });
+            if (setEnvelopeButton) setEnvelopeButton.addEventListener("click", () => {
+                envelopeInput.value = initialEnvelope || "192.168.1.0/24";
+                envelopeDialog.showModal();
+                envelopeInput.focus();
+                envelopeInput.select();
+            });
+            resetButton.addEventListener("click", resetApp);
+            if (joinButton) joinButton.addEventListener("click", executeJoin);
+
+            darkModeButton.addEventListener('click', () => {
+                document.body.classList.toggle('dark-mode');
+            });
+            if (profileSelect) {
+                profileSelect.addEventListener('change', () => {
+                    profileName = profileSelect.value;
+                    if (profileName === 'custom') {
+                        customProfileButton.style.display = '';
+                    } else {
+                        customProfileButton.style.display = 'none';
+                        reservedHead = DEFAULT_RESERVED_PROFILES[profileName].head;
+                        reservedTail = DEFAULT_RESERVED_PROFILES[profileName].tail;
+                    }
+                    logAction(`Profile set to ${profileName}.`);
+                    if (rootBlock) {
+                        const allBlocks = [rootBlock, ...getAllDescendants(rootBlock)];
+                        allBlocks.forEach(block => { block.checkUsable(); block.updateLabel(); });
+                    }
+                    if (activeBlock) updateDetailsPanel(activeBlock);
+                });
+            }
+            if (customProfileButton) {
+                customProfileButton.addEventListener('click', () => {
+                    profileHeadInput.value = reservedHead;
+                    profileTailInput.value = reservedTail;
+                    document.getElementById('profile-dialog').showModal();
+                });
+            }
+            if (profileForm) {
+                profileForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    reservedHead = Math.max(0, parseInt(profileHeadInput.value || '0', 10));
+                    reservedTail = Math.max(0, parseInt(profileTailInput.value || '0', 10));
+                    profileName = 'custom';
+                    if (profileSelect) profileSelect.value = 'custom';
+                    document.getElementById('profile-dialog').close();
+                    logAction(`Custom profile applied: head=${reservedHead}, tail=${reservedTail}.`);
+                    if (rootBlock) {
+                        const allBlocks = [rootBlock, ...getAllDescendants(rootBlock)];
+                        allBlocks.forEach(block => { block.checkUsable(); block.updateLabel(); });
+                    }
+                    if (activeBlock) updateDetailsPanel(activeBlock);
+                    updateSubnetTable();
+                });
+                profileCancelButton.addEventListener('click', () => document.getElementById('profile-dialog').close());
+            }
+            if (copyLinkButton) copyLinkButton.addEventListener('click', copyShareLink);
+            if (loadJsonButton) loadJsonButton.addEventListener('click', () => { loadJsonText.value = JSON.stringify(serializeState(), null, 2); document.getElementById('load-json-dialog').showModal(); });
+            if (loadJsonForm) {
+                loadJsonForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    try { const obj = JSON.parse(loadJsonText.value); document.getElementById('load-json-dialog').close(); loadState(obj); }
+                    catch { alert('Invalid JSON'); }
+                });
+                loadJsonCancel.addEventListener('click', () => document.getElementById('load-json-dialog').close());
+            }
+            if (labelDensitySelect) {
+                labelDensitySelect.addEventListener('change', () => {
+                    labelDensity = labelDensitySelect.value;
+                    const allBlocks = rootBlock ? [rootBlock, ...getAllDescendants(rootBlock)] : [];
+                    allBlocks.forEach(b => b.updateLabel());
+                });
+            }
+            if (planButton) planButton.addEventListener('click', () => { planText.value = ''; planDialog.showModal(); });
+            if (planCancel) planCancel.addEventListener('click', () => planDialog.close());
+            if (planForm) {
+                planForm.addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    const lines = (planText.value || '').split(/\n+/).map(s=>s.trim()).filter(Boolean);
+                    const requests = [];
+                    for (const raw of lines) {
+                        const line = raw.replace(/\s+/g, ' ');
+                        // Accept: Label: /26 x3 | /26x3 | hosts=50 | hosts: 50 | prefix=26
+                        const m = line.match(/^(?:(?<label>[^:]+):\s*)?(?:(?:\/(?<p1>\d{1,2}))|(?:prefix\s*=\s*(?<p2>\d{1,2}))|(?:hosts\s*[:=]\s*(?<h>\d+)))(?:\s*x\s*(?<count>\d+))?$/i);
+                        if (!m) { logAction(`Skip unrecognized request: ${raw}`); continue; }
+                        const label = (m.groups.label || '').trim();
+                        let p = null;
+                        if (m.groups.p1) p = parseInt(m.groups.p1, 10);
+                        else if (m.groups.p2) p = parseInt(m.groups.p2, 10);
+                        const hosts = m.groups.h ? parseInt(m.groups.h, 10) : null;
+                        if (hosts != null) p = prefixForHosts(hosts);
+                        if (p == null || isNaN(p) || p < 0 || p > 32) { logAction(`Invalid size in request: ${raw}`); continue; }
+                        const count = m.groups.count ? parseInt(m.groups.count,10) : 1;
+                        requests.push({ label, prefix:p, count, raw });
+                    }
+                    if (requests.length === 0) { alert('No valid requests found. Try examples like "\/26 x3" or "hosts=50".'); return; }
+                    // Largest-first to reduce fragmentation
+                    // Enforce provider minimums per request
+                    const prof = DEFAULT_RESERVED_PROFILES[profileName] || DEFAULT_RESERVED_PROFILES.none;
+                    const valid = [];
+                    requests.forEach(r => {
+                        if (typeof prof.minPrefix === 'number' && r.prefix < prof.minPrefix) {
+                            alert(`Provider minimum not met: /${r.prefix} < /${prof.minPrefix}. Adjust the size or change profile.`);
+                        } else {
+                            valid.push(r);
+                        }
+                    });
+                    if (valid.length === 0) { planDialog.close(); return; }
+                    requests.length = 0; Array.prototype.push.apply(requests, valid);
+                    requests.sort((a,b) => a.prefix - b.prefix);
+                    logAction(`Planning ${requests.length} request(s).`);
+                    const groupColor = () => getRandomColor();
+                    for (const req of requests) {
+                        const color = groupColor();
+                        const groupName = req.label || `Group ${groupCounter++}`;
+                        logAction(`Allocating ${req.count} x /${req.prefix}${req.label?` for ${groupName}`:''}.`);
+                        for (let i=0; i<req.count; i++) {
+                            const leaf = chooseLeafForPrefix(getLeafBlocks(), req.prefix, planHeuristic, profileName);
+                            if (!leaf) { alert(`Unable to allocate ${req.label || ''} /${req.prefix}. Not enough space or not permitted by provider.`); break; }
+                            const target = ensureLeafAtPrefix(leaf, req.prefix);
+                            if ((reservedHead + reservedTail) > 0) {
+                                const total = Math.pow(2, 32 - target.prefix);
+                                if (total <= (reservedHead + reservedTail)) { alert('Unusable under current reservation profile.'); break; }
+                            }
+                            target.allocated = true;
+                            target.groupName = groupName;
+                            target.element.classList.add('is-allocated');
+                            target.element.style.backgroundColor = color;
+                            logAction(`Allocated ${intToIp(target.start)}/${target.prefix} to ${groupName}.`);
+                        }
+                    }
+                    planDialog.close();
+                    updateSubnetTable();
+                });
+            }
+            // Exercises removed per request
+            if (nextFitPrefix) {
+                // populate options /16..../32
+                for (let p=16; p<=32; p++) {
+                    const opt = document.createElement('option');
+                    opt.value = String(p);
+                    opt.textContent = `Find Next Fit: /${p}`;
+                    nextFitPrefix.appendChild(opt);
+                }
+                nextFitPrefix.addEventListener('change', () => {
+                    const p = parseInt(nextFitPrefix.value || '', 10);
+                    if (isNaN(p)) { clearCandidateHighlights(); return; }
+                    highlightCandidatesForPrefix(p);
+                });
+            }
+            if (clearHighlightsButton) clearHighlightsButton.addEventListener('click', clearCandidateHighlights);
+            if (filterAllocated) filterAllocated.addEventListener('change', updateSubnetTable);
+            if (sortBySelect) sortBySelect.addEventListener('change', updateSubnetTable);
+            if (copyCsvButton) copyCsvButton.addEventListener('click', () => {
+                const rows = Array.from((subnetTableBody || {}).querySelectorAll('tr') || []);
+                const lines = [['CIDR','Usable','Status','Group']].concat(rows.map(tr => Array.from(tr.children).map(td=>td.textContent)));
+                const csv = lines.map(cols => cols.map(v => '"' + String(v).replace(/"/g,'""') + '"').join(',')).join('\n');
+                if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(csv);
+            });
+            if (detailsSplitButton) {
+                detailsSplitButton.addEventListener('click', () => {
+                    if (activeBlock) activeBlock.promptSplit();
+                });
+            }
+            // Pan/zoom
+            function clamp(n, min, max){ return Math.max(min, Math.min(max, n)); }
+            if (viewportEl) {
+                viewportEl.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const delta = e.deltaY;
+                    const factor = Math.exp(-delta * 0.001);
+                    const rect = viewportEl.getBoundingClientRect();
+                    const cx = e.clientX - rect.left;
+                    const cy = e.clientY - rect.top;
+                    const prevScale = scale;
+                    scale = clamp(scale * factor, 0.3, 4);
+                    // Zoom to cursor: adjust pan so point under cursor stays stable
+                    panX = cx - ( (cx - panX) * (scale/prevScale) );
+                    panY = cy - ( (cy - panY) * (scale/prevScale) );
+                    applyViewTransform();
+                }, { passive: false });
+                viewportEl.addEventListener('mousedown', (e) => {
+                    const leftDragPan = (e.button === 0 && (panMode || e.shiftKey));
+                    const rightDragPan = (e.button === 2);
+                    if (!leftDragPan && !rightDragPan) return;
+                    isPanning = true; lastMouse = { x: e.clientX, y: e.clientY };
+                    viewportEl.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    document.body.classList.add('is-panning');
+                });
+                viewportEl.addEventListener('contextmenu', (e) => { e.preventDefault(); });
+                window.addEventListener('mousemove', (e) => {
+                    if (!isPanning) return;
+                    const dx = e.clientX - lastMouse.x; const dy = e.clientY - lastMouse.y;
+                    panX += dx; panY += dy; lastMouse = { x: e.clientX, y: e.clientY }; applyViewTransform();
+                    e.preventDefault();
+                });
+                window.addEventListener('mouseup', () => { if (isPanning) { isPanning = false; viewportEl.style.cursor = ''; document.body.classList.remove('is-panning'); } });
+            }
+            if (panModeButton) panModeButton.addEventListener('click', () => { panMode = !panMode; panModeButton.classList.toggle('active-button', panMode); });
+            if (fitViewButton) fitViewButton.addEventListener('click', () => { scale = 1; panX = 0; panY = 0; applyViewTransform(); });
+            if (resetViewButton) resetViewButton.addEventListener('click', () => { scale = 1; panX = 0; panY = 0; applyViewTransform(); });
+            if (undoButton) undoButton.addEventListener('click', undoLast);
+            if (redoButton) redoButton.addEventListener('click', redoLast);
+
+            // Compact + animations
+            if (compactToggle) compactToggle.addEventListener('click', () => { document.body.classList.toggle('compact'); });
+            if (animSelect) animSelect.addEventListener('change', () => {
+                const val = animSelect.value;
+                let speed = '0.3s'; if (val === 'reduced') speed = '0.1s'; if (val === 'off') speed = '0s';
+                document.documentElement.style.setProperty('--transition-speed', speed);
+            });
+
+            // Lightweight menu toggle for touch/click
+            document.querySelectorAll('.menu .menu-trigger').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const menu = btn.closest('.menu');
+                    const isOpen = menu.classList.contains('open');
+                    document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
+                    if (!isOpen) menu.classList.add('open');
+                });
+            });
+            window.addEventListener('click', (e) => {
+                if (!e.target.closest('.menu')) document.querySelectorAll('.menu.open').forEach(m => m.classList.remove('open'));
+            });
+
+            // Help dialogs & onboarding
+            const helpDialog = document.getElementById('help-dialog');
+            const nextfitDialog = document.getElementById('nextfit-dialog');
+            const shortcutsDialog = document.getElementById('shortcuts-dialog');
+            const onboarding = document.getElementById('onboarding-banner');
+            const obStart = document.getElementById('ob-start');
+            const obHide = document.getElementById('ob-hide');
+            const showOnboarding = () => {
+                if (!localStorage.getItem('sv_seen_onboarding') && onboarding) onboarding.style.display = 'flex';
+            };
+            requestAnimationFrame(showOnboarding);
+            if (obHide) obHide.addEventListener('click', () => { onboarding.style.display = 'none'; localStorage.setItem('sv_seen_onboarding','1'); });
+            if (obStart) obStart.addEventListener('click', () => { onboarding.style.display = 'none'; localStorage.setItem('sv_seen_onboarding','1'); if (helpDialog) helpDialog.showModal(); });
+            const byId = id => document.getElementById(id);
+            const open = dlg => dlg && dlg.showModal();
+            const closeBtn = (id, dlg) => { const b = byId(id); if (b && dlg) b.addEventListener('click', () => dlg.close()); };
+            const bindOpen = (id, dlg) => { const b = byId(id); if (b) b.addEventListener('click', () => open(dlg)); };
+            bindOpen('help-overview', helpDialog); closeBtn('help-close', helpDialog);
+            bindOpen('help-nextfit', nextfitDialog); closeBtn('nextfit-close', nextfitDialog);
+            bindOpen('help-shortcuts', shortcutsDialog); closeBtn('shortcuts-close', shortcutsDialog);
+
+            // Draggable details panel (grab header)
+            (function enableDetailsDrag(){
+                if (!detailsPanel) return;
+                const header = detailsPanel.querySelector('h2');
+                if (!header) return;
+                let dragging = false; let sx=0, sy=0, px=0, py=0, w=0, h=0;
+                let docked = localStorage.getItem('sv_details_dock') || 'none';
+                const clamp = (n,min,max)=>Math.max(min,Math.min(max,n));
+                const getToolbarOffset = () => {
+                    const v = getComputedStyle(document.documentElement).getPropertyValue('--toolbar-offset');
+                    const n = parseFloat(v)||120; return n;
+                };
+                const applyDock = (side) => {
+                    detailsPanel.classList.remove('docked-left','docked-right');
+                    if (side === 'left') { detailsPanel.classList.add('docked-left'); detailsPanel.style.left='0px'; detailsPanel.style.right='auto'; }
+                    else if (side === 'right') { detailsPanel.classList.add('docked-right'); detailsPanel.style.right='0px'; detailsPanel.style.left='auto'; }
+                    else { /* none */ }
+                    docked = side || 'none';
+                    localStorage.setItem('sv_details_dock', docked);
+                };
+                const undock = () => { detailsPanel.classList.remove('docked-left','docked-right'); docked='none'; localStorage.setItem('sv_details_dock','none'); };
+                // Restore dock state
+                if (docked === 'left' || docked === 'right') applyDock(docked);
+                const applySaved = () => {
+                    try {
+                        const saved = JSON.parse(localStorage.getItem('sv_details_pos')||'null');
+                        if (saved && Number.isFinite(saved.left) && Number.isFinite(saved.top)) {
+                            detailsPanel.style.left = saved.left + 'px';
+                            detailsPanel.style.top = saved.top + 'px';
+                            detailsPanel.style.right = 'auto';
+                        }
+                    } catch {}
+                };
+                if (docked === 'none') applySaved();
+                header.addEventListener('dblclick', () => {
+                    undock();
+                    detailsPanel.style.left = '';
+                    detailsPanel.style.right = '20px';
+                    detailsPanel.style.top = `calc(var(--toolbar-offset, 120px) + 16px)`;
+                    localStorage.removeItem('sv_details_pos');
+                });
+                header.addEventListener('mousedown', (e) => {
+                    dragging = true; detailsPanel.classList.add('dragging'); undock();
+                    const rect = detailsPanel.getBoundingClientRect();
+                    sx = e.clientX; sy = e.clientY; px = rect.left; py = rect.top; w = rect.width; h = rect.height;
+                    e.preventDefault();
+                });
+                window.addEventListener('mousemove', (e) => {
+                    if (!dragging) return;
+                    let nx = px + (e.clientX - sx);
+                    let ny = py + (e.clientY - sy);
+                    const minTop = getToolbarOffset() + 8; // keep below toolbar
+                    nx = clamp(nx, 8, window.innerWidth - w - 8);
+                    ny = clamp(ny, minTop, window.innerHeight - h - 8);
+                    detailsPanel.style.left = nx + 'px';
+                    detailsPanel.style.top = ny + 'px';
+                    detailsPanel.style.right = 'auto';
+                });
+                window.addEventListener('mouseup', () => {
+                    if (!dragging) return; dragging = false; detailsPanel.classList.remove('dragging');
+                    const rect = detailsPanel.getBoundingClientRect();
+                    localStorage.setItem('sv_details_pos', JSON.stringify({left: Math.round(rect.left), top: Math.round(rect.top)}));
+                    // Auto-dock if dropped near an edge
+                    const leftDist = rect.left;
+                    const rightDist = window.innerWidth - rect.right;
+                    const edgeThresh = 24;
+                    if (leftDist < edgeThresh) applyDock('left');
+                    else if (rightDist < edgeThresh) applyDock('right');
+                });
+                // Dock tab click to undock and reveal
+                const tab = document.getElementById('details-dock-tab');
+                if (tab) tab.addEventListener('click', () => {
+                    undock();
+                    // Snap inside the edge by 20px
+                    const rect = detailsPanel.getBoundingClientRect();
+                    if (rect.left < window.innerWidth/2) { detailsPanel.style.left = '20px'; detailsPanel.style.right = 'auto'; }
+                    else { detailsPanel.style.right = '20px'; detailsPanel.style.left = 'auto'; }
+                });
+                // Optional: autohide on scroll (dock to nearest edge)
+                let lastY = window.scrollY;
+                window.addEventListener('scroll', () => {
+                    const dy = window.scrollY - lastY; lastY = window.scrollY;
+                    if (Math.abs(dy) < 20) return; // ignore tiny scrolls
+                    if (dragging) return;
+                    const rect = detailsPanel.getBoundingClientRect();
+                    const leftDist = rect.left; const rightDist = window.innerWidth - rect.right;
+                    if (docked === 'none') {
+                        if (leftDist <= rightDist) applyDock('left'); else applyDock('right');
+                    }
+                });
+            })();
+
+            // Export SVG/PNG by sampling current blocks on screen
+            function sampleBlocksForExport() {
+                const rectViewport = viewportEl.getBoundingClientRect();
+                const blocks = Array.from(document.querySelectorAll('#container .block'));
+                return blocks.map(el => {
+                    const r = el.getBoundingClientRect();
+                    return {
+                        x: r.left - rectViewport.left,
+                        y: r.top - rectViewport.top,
+                        w: r.width,
+                        h: r.height,
+                        color: el.style.backgroundColor || window.getComputedStyle(el).backgroundColor,
+                        text: el.textContent.trim()
+                    };
+                });
+            }
+            function exportSVG(options = {includeDetails:true, includeLegend:true}) {
+                const vb = viewportEl.getBoundingClientRect();
+                const items = sampleBlocksForExport();
+                const svgParts = [];
+                svgParts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${vb.width}" height="${vb.height}">`);
+                svgParts.push(`<rect width="100%" height="100%" fill="${getComputedStyle(document.body).getPropertyValue('--card-bg').trim()}"/>`);
+                items.forEach(it => {
+                    svgParts.push(`<rect x="${it.x.toFixed(1)}" y="${it.y.toFixed(1)}" width="${it.w.toFixed(1)}" height="${it.h.toFixed(1)}" fill="${it.color}" stroke="rgba(0,0,0,0.2)"/>`);
+                    if (it.w > 40 && it.h > 16) {
+                        const tx = it.x + it.w/2; const ty = it.y + it.h/2+4;
+                        svgParts.push(`<text x="${tx.toFixed(1)}" y="${ty.toFixed(1)}" font-family="monospace" font-size="12" text-anchor="middle" fill="#333">${it.text.replace(/&/g,'&amp;')}</text>`);
+                    }
+                });
+                // Legend
+                if (options.includeLegend) {
+                    const legends = [
+                        { label: 'Usable', color: getComputedStyle(document.body).getPropertyValue('--primary-color').trim() || '#007bff' },
+                        { label: 'Reserved/Network/Broadcast', color: getComputedStyle(document.body).getPropertyValue('--unusable-color').trim() || '#A52A2A' },
+                        { label: 'Allocated', color: '#28a745' }
+                    ];
+                    const x0 = 10, y0 = 10, h = 18;
+                    legends.forEach((li, i) => {
+                        const y = y0 + i*h;
+                        svgParts.push(`<rect x=\"${x0}\" y=\"${y}\" width=\"12\" height=\"12\" fill=\"${li.color}\" stroke=\"#444\"/>`);
+                        svgParts.push(`<text x=\"${x0+18}\" y=\"${y+11}\" font-family=\"system-ui,Segoe UI,Arial\" font-size=\"12\" fill=\"#333\">${li.label}</text>`);
+                    });
+                }
+                if (options.includeDetails) {
+                    const pad = 10; const w = 240; const h = 120; const x = vb.width - w - 10; const y = 10;
+                    svgParts.push(`<rect x=\"${x}\" y=\"${y}\" width=\"${w}\" height=\"${h}\" rx=\"6\" ry=\"6\" fill=\"#fff\" stroke=\"#ccc\"/>`);
+                    const lines = [
+                        `CIDR: ${detailsCidr.textContent}`,
+                        `Network: ${detailsNetwork.textContent}`,
+                        `Usable: ${detailsUsable.textContent}`,
+                        `Broadcast: ${detailsBroadcast.textContent}`,
+                        `Mask: ${detailsMask.textContent}`,
+                        `${detailsIps.textContent}`
+                    ];
+                    lines.slice(0,7).forEach((t, i) => {
+                        svgParts.push(`<text x=\"${x+pad}\" y=\"${y+pad+14*i}\" font-family=\"system-ui,Segoe UI,Arial\" font-size=\"12\" fill=\"#333\">${t.replace(/&/g,'&amp;')}</text>`);
+                    });
+                }
+                svgParts.push(`</svg>`);
+                const blob = new Blob([svgParts.join('\n')], { type: 'image/svg+xml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url; a.download = 'subnets.svg'; a.click(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+            }
+            async function exportPNG(options = {includeDetails:true, includeLegend:true}) {
+                const vb = viewportEl.getBoundingClientRect();
+                const items = sampleBlocksForExport();
+                const canvas = document.createElement('canvas'); canvas.width = vb.width; canvas.height = vb.height; const ctx = canvas.getContext('2d');
+                // Background
+                ctx.fillStyle = getComputedStyle(document.body).getPropertyValue('--card-bg').trim() || '#fff';
+                ctx.fillRect(0,0,canvas.width,canvas.height);
+                items.forEach(it => {
+                    ctx.fillStyle = it.color || '#ddd';
+                    ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                    ctx.lineWidth = 1;
+                    ctx.fillRect(it.x, it.y, it.w, it.h);
+                    ctx.strokeRect(it.x, it.y, it.w, it.h);
+                    if (it.w > 40 && it.h > 16) {
+                        ctx.fillStyle = '#333';
+                        ctx.font = '12px monospace';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(it.text, it.x + it.w/2, it.y + it.h/2);
+                    }
+                });
+                // Legend
+                if (options.includeLegend) {
+                    const legends = [
+                        { label: 'Usable', color: getComputedStyle(document.body).getPropertyValue('--primary-color').trim() || '#007bff' },
+                        { label: 'Reserved/Network/Broadcast', color: getComputedStyle(document.body).getPropertyValue('--unusable-color').trim() || '#A52A2A' },
+                        { label: 'Allocated', color: '#28a745' }
+                    ];
+                    const x0 = 10, y0 = 10, h = 18;
+                    legends.forEach((li, i) => {
+                        const y = y0 + i*h; ctx.fillStyle = li.color; ctx.fillRect(x0, y, 12, 12); ctx.strokeStyle = '#444'; ctx.strokeRect(x0, y, 12, 12);
+                        ctx.fillStyle = '#333'; ctx.font = '12px system-ui, Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic'; ctx.fillText(li.label, x0+18, y+11);
+                    });
+                }
+                if (options.includeDetails) {
+                    const pad = 10, w = 240, h = 120, x = vb.width - w - 10, y = 10;
+                    ctx.fillStyle = '#fff'; ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x,y,w,h,6) : (ctx.rect(x,y,w,h)); ctx.fill(); ctx.stroke();
+                    const lines = [
+                        `CIDR: ${detailsCidr.textContent}`,
+                        `Network: ${detailsNetwork.textContent}`,
+                        `Usable: ${detailsUsable.textContent}`,
+                        `Broadcast: ${detailsBroadcast.textContent}`,
+                        `Mask: ${detailsMask.textContent}`,
+                        `${detailsIps.textContent}`
+                    ];
+                    ctx.fillStyle = '#333'; ctx.font = '12px system-ui, Segoe UI, Arial'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+                    lines.slice(0,7).forEach((t,i)=> ctx.fillText(t, x+pad, y+pad + 14*i));
+                }
+                const url = canvas.toDataURL('image/png');
+                const a = document.createElement('a'); a.href = url; a.download = 'subnets.png'; a.click();
+            }
+            if (exportSvgButton) exportSvgButton.addEventListener('click', () => { pendingExportFormat = 'svg'; exportDialog.showModal(); });
+            if (exportPngButton) exportPngButton.addEventListener('click', () => { pendingExportFormat = 'png'; exportDialog.showModal(); });
+            if (exportCancel) exportCancel.addEventListener('click', () => exportDialog.close());
+            if (exportForm) exportForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const opts = { includeDetails: !!document.getElementById('export-include-details').checked, includeLegend: !!document.getElementById('export-include-legend').checked };
+                exportDialog.close();
+                if (pendingExportFormat === 'svg') exportSVG(opts); else exportPNG(opts);
+                pendingExportFormat = null;
+            });
+
+            // Expose helpers for quick ribbon
+            window.svHighlight = (p) => { try { highlightCandidatesForPrefix(p); } catch {} };
+            window.svClearHighlights = () => { try { clearCandidateHighlights(); } catch {} };
+
+            // Populate quick Next Fit select
+            const qnf = document.getElementById('qa-nextfit');
+            if (qnf) {
+                for (let p=16; p<=32; p++) { const opt=document.createElement('option'); opt.value=String(p); opt.textContent = `/${p}`; qnf.appendChild(opt); }
+            }
+            const qaAddress = document.getElementById('qa-address');
+            const qaPlan = document.getElementById('qa-plan');
+            const qaHighlight = document.getElementById('qa-highlight');
+            const qaClear = document.getElementById('qa-clear');
+            const qaHelp = document.getElementById('qa-help');
+            const qaSeed = document.getElementById('qa-seed');
+            if (qaAddress) { qaAddress.title = 'Set a root CIDR envelope (e.g., 10.0.0.0/16)'; qaAddress.addEventListener('click', () => { document.getElementById('envelope-input') ? document.getElementById('envelope-dialog').showModal() : null; }); }
+            if (qaPlan) { qaPlan.title = 'Auto‑allocate requests (e.g., “/26 x3”, “hosts=50”)'; qaPlan.addEventListener('click', () => { const dlg=document.getElementById('plan-dialog'); if (dlg) dlg.showModal(); }); }
+            const qaJoin = document.getElementById('qa-join');
+            if (qaJoin) { qaJoin.title = 'Join selected sibling blocks'; qaJoin.addEventListener('click', () => { try { executeJoin(); } catch {} }); }
+            if (qaHighlight) { qaHighlight.title = 'Highlight candidate leaves for the selected size'; qaHighlight.addEventListener('click', () => { if (qnf) window.svHighlight(parseInt(qnf.value||'24',10)); }); }
+            if (qaClear) { qaClear.title = 'Clear highlight overlay'; qaClear.addEventListener('click', () => window.svClearHighlights()); }
+            if (qaHelp) { qaHelp.title = 'Open overview and tips'; qaHelp.addEventListener('click', () => { const dlg=document.getElementById('help-dialog'); if (dlg) dlg.showModal(); }); }
+            if (qaSeed) { qaSeed.addEventListener('click', () => { initialEnvelope = '192.168.1.0/24'; resetApp(); }); }
+
+            // Tips toggle
+            const tipsToggle = document.getElementById('tips-toggle');
+            const canvasTips = document.getElementById('canvas-tips');
+            const applyTipsState = () => { const on = localStorage.getItem('sv_tips') === '1'; if (canvasTips) canvasTips.style.display = on ? 'block' : 'none'; };
+            applyTipsState();
+            if (tipsToggle) tipsToggle.addEventListener('click', () => { const on = localStorage.getItem('sv_tips') === '1'; localStorage.setItem('sv_tips', on ? '0' : '1'); applyTipsState(); });
+
+            // Command palette (⌘K / Ctrl+K)
+            const cmdDlg = document.getElementById('cmdk-dialog');
+            const cmdInput = document.getElementById('cmdk-input');
+            const cmdList = document.getElementById('cmdk-list');
+            const run = (fn) => { try { fn(); } catch {} };
+            const openCmd = () => { if (!cmdDlg) return; cmdDlg.showModal(); cmdInput.value=''; renderCmd(''); setTimeout(()=>cmdInput.focus(),10); };
+            const actions = [
+                { label: 'Set Address', keywords: 'address envelope', run: ()=>{ const d=document.getElementById('envelope-dialog'); if(d) d.showModal(); } },
+                { label: 'Plan Subnets', keywords: 'plan allocate', run: ()=>{ const d=document.getElementById('plan-dialog'); if(d) d.showModal(); } },
+                { label: 'Next Fit /26 (example)', keywords: 'next fit /26', run: ()=>{ window.svHighlight(26); } },
+                { label: 'Clear Highlights', keywords: 'clear highlight', run: ()=> window.svClearHighlights() },
+                { label: 'Fit View', keywords: 'fit view', run: ()=>{ const b=document.getElementById('fitViewButton'); if(b) b.click(); } },
+                { label: 'Reset View', keywords: 'reset view', run: ()=>{ const b=document.getElementById('resetViewButton'); if(b) b.click(); } },
+                { label: 'Toggle Compact', keywords: 'compact', run: ()=>{ const b=document.getElementById('compactToggle'); if(b) b.click(); } },
+                { label: 'Help', keywords: 'help overview', run: ()=>{ const d=document.getElementById('help-dialog'); if(d) d.showModal(); } },
+                { label: 'Keyboard Shortcuts', keywords: 'shortcuts', run: ()=>{ const d=document.getElementById('shortcuts-dialog'); if(d) d.showModal(); } }
+            ];
+            const renderCmd = (q) => {
+                if (!cmdList) return;
+                const qq = q.trim().toLowerCase();
+                const list = document.createDocumentFragment();
+                // If user typed /NN, show Next Fit for that
+                let extra = null; const m = qq.match(/\/([0-9]{1,2})/);
+                if (m) {
+                    const p = Math.max(0, Math.min(32, parseInt(m[1],10)));
+                    extra = { label: `Next Fit /${p}`, run: ()=> window.svHighlight(p) };
+                }
+                const filtered = actions.filter(a => !qq || a.label.toLowerCase().includes(qq) || a.keywords.includes(qq));
+                cmdList.innerHTML='';
+                if (extra) { const b=document.createElement('button'); b.className='cmdk-item'; b.textContent = extra.label; b.addEventListener('click', ()=>{ run(extra.run); cmdDlg.close(); }); list.appendChild(b); }
+                filtered.forEach(a=>{ const b=document.createElement('button'); b.className='cmdk-item'; b.textContent=a.label; b.addEventListener('click', ()=>{ run(a.run); cmdDlg.close(); }); list.appendChild(b); });
+                cmdList.appendChild(list);
+            };
+            if (cmdInput) cmdInput.addEventListener('input', ()=> renderCmd(cmdInput.value));
+            window.addEventListener('keydown', (e)=>{ const k=e.key.toLowerCase(); if ((e.metaKey||e.ctrlKey) && k==='k') { e.preventDefault(); openCmd(); }});
+            if (cmdDlg) cmdDlg.addEventListener('close', ()=>{ if (cmdInput) cmdInput.value=''; });
+
+            // Coachmarks on first‑run
+            (function coach(){
+                if (localStorage.getItem('sv_seen_coach')==='1') return;
+                const addr = document.getElementById('qa-address');
+                const plan = document.getElementById('qa-plan');
+                const nfit = document.getElementById('qa-nextfit');
+                [addr,plan,nfit].forEach(el=> el && el.classList.add('coach'));
+                const clearCoach = ()=>{ [addr,plan,nfit].forEach(el=> el && el.classList.remove('coach')); localStorage.setItem('sv_seen_coach','1'); };
+                [addr,plan,qaHighlight,qaClear].forEach(el=> el && el.addEventListener('click', clearCoach, { once:true }));
+            })();
+            if (binaryToggle) {
+                binaryToggle.addEventListener('click', () => {
+                    binaryOverlayEnabled = !binaryOverlayEnabled;
+                    binaryToggle.classList.toggle('active-button', binaryOverlayEnabled);
+                    updateBinaryOverlay(activeBlock);
+                });
+            }
+            if (binarySlider) {
+                binarySlider.addEventListener('input', () => updateBinaryOverlay(activeBlock));
+            }
+            if (whyUsableBtn) {
+                whyUsableBtn.addEventListener('click', () => {
+                    if (!activeBlock) return;
+                    explanationBox.textContent = usableExplanation(activeBlock);
+                });
+            }
+
+            // Initial Load
+            if (location.hash && location.hash.startsWith('#state=')) {
+                try { const json = atob(location.hash.replace('#state=', '')); const state = JSON.parse(json); loadState(state); }
+                catch { resetApp(); }
+            } else {
+                resetApp();
+            }
+            // As a safety net, ensure something is rendered shortly after load
+            setTimeout(ensureRootInitialized, 250);
+            window.addEventListener('load', () => setTimeout(ensureRootInitialized, 100));
+        });
+    </script>
+</body>
+</html>
