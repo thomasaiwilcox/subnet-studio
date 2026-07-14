@@ -31,7 +31,7 @@ jobs:
       - name: Verify source and production artifact
         run: npm run check
       - name: Upload standalone build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: subnet-studio-dist
           path: dist/
@@ -74,7 +74,7 @@ jobs:
         run: npm run test:e2e:ci -- --project=${{ matrix.project }}
       - name: Upload failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-${{ matrix.project }}
           path: test-results/
