@@ -3,6 +3,7 @@
   "version": "2.0.0",
   "description": "An explainable, offline-first visual studio for learning and planning IPv4 subnets.",
   "private": true,
+  "packageManager": "npm@10.9.4",
   "license": "MIT",
   "author": "Thomas Wilcox",
   "homepage": "https://thomaswilcox.com/subnetvisualiser/",
